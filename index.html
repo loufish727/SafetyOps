@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10231f">
+    <meta
+      name="description"
+      content="SafetyOps is a multi-location workplace safety training, inspection, incident, and document management prototype."
+    >
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co; img-src 'self' data: blob: https://*.supabase.co; media-src 'self' blob: https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests"
+    >
+    <title>SafetyOps · Safety command center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div id="app" aria-live="polite"></div>
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+    <div id="reference-panel-region"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4" crossorigin="anonymous"></script>
+    <script src="supabase-config.js"></script>
+    <script src="data.js"></script>
+    <script src="osha-reference.js"></script>
+    <script src="safety-programs.js"></script>
+    <script src="safety-source-lineage.js"></script>
+    <script src="safety-program-extracts.js"></script>
+    <script src="tenant-bootstrap.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

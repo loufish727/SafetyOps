@@ -1,0 +1,274 @@
+{
+  "schemaVersion": "1.0.0",
+  "manifestId": "22222222-2222-4222-8222-222222222222",
+  "manifestSha256": "aa9f7411be1be071111ec16682fb66d620ce2f0e166318f6fa20a81cb8abab09",
+  "generatedAt": "2026-07-30T19:00:00.000Z",
+  "tenant": {
+    "companyId": "11111111-1111-4111-8111-111111111111"
+  },
+  "source": {
+    "provider": "google-drive",
+    "connectionKey": "safety-programs",
+    "rootFolderId": "drive-root-safety-programs",
+    "rootName": "Safety Programs",
+    "driveId": null,
+    "oauthScope": "https://www.googleapis.com/auth/drive.readonly"
+  },
+  "snapshot": {
+    "kind": "full",
+    "complete": true
+  },
+  "exportPolicy": {
+    "canonicalMimeType": "application/pdf",
+    "includeEditableExports": true,
+    "mimeMappings": {
+      "application/pdf": [
+        {
+          "role": "canonical",
+          "mimeType": "application/pdf",
+          "extension": "pdf",
+          "exportMethod": "download"
+        }
+      ],
+      "application/vnd.google-apps.document": [
+        {
+          "role": "canonical",
+          "mimeType": "application/pdf",
+          "extension": "pdf",
+          "exportMethod": "google-export"
+        },
+        {
+          "role": "editable",
+          "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "extension": "docx",
+          "exportMethod": "google-export"
+        }
+      ],
+      "application/vnd.google-apps.spreadsheet": [
+        {
+          "role": "canonical",
+          "mimeType": "application/pdf",
+          "extension": "pdf",
+          "exportMethod": "google-export"
+        },
+        {
+          "role": "editable",
+          "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "extension": "xlsx",
+          "exportMethod": "google-export"
+        }
+      ]
+    }
+  },
+  "items": [
+    {
+      "providerItemId": "drive-root-safety-programs",
+      "parentProviderItemId": null,
+      "pathIds": [
+        "drive-root-safety-programs"
+      ],
+      "pathSegments": [
+        "Safety Programs"
+      ],
+      "displayPath": "Safety Programs",
+      "pathKey": "safety-programs--12190c98640d",
+      "name": "Safety Programs",
+      "kind": "folder",
+      "sourceMimeType": "application/vnd.google-apps.folder",
+      "modifiedTime": "2026-07-29T20:00:00.000Z",
+      "providerVersion": "12",
+      "providerMd5Checksum": null,
+      "sourceSizeBytes": null,
+      "ingestDisposition": "metadata-only",
+      "skipReason": "Folder metadata only",
+      "artifacts": [],
+      "document": {
+        "title": "Safety Programs",
+        "documentType": "Safety Program",
+        "visibility": "company",
+        "acknowledgementRequired": false,
+        "effectiveAt": null,
+        "reviewAt": null,
+        "locationKeys": []
+      },
+      "oshaCitations": []
+    },
+    {
+      "providerItemId": "drive-pdf-emergency-action",
+      "parentProviderItemId": "drive-root-safety-programs",
+      "pathIds": [
+        "drive-root-safety-programs",
+        "drive-pdf-emergency-action"
+      ],
+      "pathSegments": [
+        "Safety Programs",
+        "Emergency Action Plan.pdf"
+      ],
+      "displayPath": "Safety Programs/Emergency Action Plan.pdf",
+      "pathKey": "safety-programs--12190c98640d/emergency-action-plan-pdf--1d6118362689",
+      "name": "Emergency Action Plan.pdf",
+      "kind": "file",
+      "sourceMimeType": "application/pdf",
+      "modifiedTime": "2026-07-28T18:15:00.000Z",
+      "providerVersion": "7",
+      "providerMd5Checksum": "ffffffffffffffffffffffffffffffff",
+      "sourceSizeBytes": 118204,
+      "ingestDisposition": "ingest",
+      "skipReason": null,
+      "artifacts": [
+        {
+          "role": "canonical",
+          "mimeType": "application/pdf",
+          "extension": "pdf",
+          "exportMethod": "download",
+          "byteLength": 118204,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "stagedFile": "1d61183626892e2145014c7a2fd392cf/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/canonical.pdf",
+          "storageObjectKey": "11111111-1111-4111-8111-111111111111/imports/google-drive/safety-programs/items/1d61183626892e2145014c7a2fd392cf/versions/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/canonical.pdf"
+        }
+      ],
+      "document": {
+        "title": "Emergency Action Plan",
+        "documentType": "Plan",
+        "visibility": "company",
+        "acknowledgementRequired": true,
+        "effectiveAt": "2026-08-01",
+        "reviewAt": "2027-08-01",
+        "locationKeys": []
+      },
+      "oshaCitations": [
+        {
+          "authority": "federal-regulation",
+          "citation": "29 CFR 1910.38",
+          "jurisdiction": "US-FED-OSHA",
+          "relation": "implements",
+          "sourceUrl": "https://www.ecfr.gov/current/title-29/subtitle-B/chapter-XVII/part-1910/subpart-E/section-1910.38",
+          "reviewStatus": "unverified",
+          "regulatoryUnitVersionId": null,
+          "notes": "Resolve to the exact regulatory unit version before approving a control mapping."
+        }
+      ]
+    },
+    {
+      "providerItemId": "drive-doc-lockout-tagout",
+      "parentProviderItemId": "drive-root-safety-programs",
+      "pathIds": [
+        "drive-root-safety-programs",
+        "drive-doc-lockout-tagout"
+      ],
+      "pathSegments": [
+        "Safety Programs",
+        "Lockout Tagout Program"
+      ],
+      "displayPath": "Safety Programs/Lockout Tagout Program",
+      "pathKey": "safety-programs--12190c98640d/lockout-tagout-program--f46ecd426e65",
+      "name": "Lockout Tagout Program",
+      "kind": "file",
+      "sourceMimeType": "application/vnd.google-apps.document",
+      "modifiedTime": "2026-07-27T16:45:00.000Z",
+      "providerVersion": "34",
+      "providerMd5Checksum": null,
+      "sourceSizeBytes": null,
+      "ingestDisposition": "ingest",
+      "skipReason": null,
+      "artifacts": [
+        {
+          "role": "canonical",
+          "mimeType": "application/pdf",
+          "extension": "pdf",
+          "exportMethod": "google-export",
+          "byteLength": 94012,
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "stagedFile": "f46ecd426e65b19a12f59d6815c7806c/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/canonical.pdf",
+          "storageObjectKey": "11111111-1111-4111-8111-111111111111/imports/google-drive/safety-programs/items/f46ecd426e65b19a12f59d6815c7806c/versions/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb/canonical.pdf"
+        },
+        {
+          "role": "editable",
+          "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "extension": "docx",
+          "exportMethod": "google-export",
+          "byteLength": 48100,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "stagedFile": "f46ecd426e65b19a12f59d6815c7806c/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/editable.docx",
+          "storageObjectKey": "11111111-1111-4111-8111-111111111111/imports/google-drive/safety-programs/items/f46ecd426e65b19a12f59d6815c7806c/versions/sha256-cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc/editable.docx"
+        }
+      ],
+      "document": {
+        "title": "Lockout Tagout Program",
+        "documentType": "Program",
+        "visibility": "company",
+        "acknowledgementRequired": true,
+        "effectiveAt": "2026-08-01",
+        "reviewAt": "2027-08-01",
+        "locationKeys": []
+      },
+      "oshaCitations": [
+        {
+          "authority": "federal-regulation",
+          "citation": "29 CFR 1910.147(c)(7)",
+          "jurisdiction": "US-FED-OSHA",
+          "relation": "training-for",
+          "sourceUrl": "https://www.ecfr.gov/current/title-29/subtitle-B/chapter-XVII/part-1910/subpart-J/section-1910.147",
+          "reviewStatus": "unverified",
+          "regulatoryUnitVersionId": null,
+          "notes": "Pin the citation to the applicable federal or state-plan unit version during compliance review."
+        }
+      ]
+    },
+    {
+      "providerItemId": "drive-sheet-training-matrix",
+      "parentProviderItemId": "drive-root-safety-programs",
+      "pathIds": [
+        "drive-root-safety-programs",
+        "drive-sheet-training-matrix"
+      ],
+      "pathSegments": [
+        "Safety Programs",
+        "Training Matrix"
+      ],
+      "displayPath": "Safety Programs/Training Matrix",
+      "pathKey": "safety-programs--12190c98640d/training-matrix--0ab9a5cbbe01",
+      "name": "Training Matrix",
+      "kind": "file",
+      "sourceMimeType": "application/vnd.google-apps.spreadsheet",
+      "modifiedTime": "2026-07-26T15:30:00.000Z",
+      "providerVersion": "51",
+      "providerMd5Checksum": null,
+      "sourceSizeBytes": null,
+      "ingestDisposition": "ingest",
+      "skipReason": null,
+      "artifacts": [
+        {
+          "role": "canonical",
+          "mimeType": "application/pdf",
+          "extension": "pdf",
+          "exportMethod": "google-export",
+          "byteLength": 203100,
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "stagedFile": "0ab9a5cbbe01636f93d9c644451366b0/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/canonical.pdf",
+          "storageObjectKey": "11111111-1111-4111-8111-111111111111/imports/google-drive/safety-programs/items/0ab9a5cbbe01636f93d9c644451366b0/versions/sha256-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/canonical.pdf"
+        },
+        {
+          "role": "editable",
+          "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "extension": "xlsx",
+          "exportMethod": "google-export",
+          "byteLength": 72188,
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "stagedFile": "0ab9a5cbbe01636f93d9c644451366b0/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/editable.xlsx",
+          "storageObjectKey": "11111111-1111-4111-8111-111111111111/imports/google-drive/safety-programs/items/0ab9a5cbbe01636f93d9c644451366b0/versions/sha256-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/editable.xlsx"
+        }
+      ],
+      "document": {
+        "title": "Training Matrix",
+        "documentType": "Training Matrix",
+        "visibility": "restricted",
+        "acknowledgementRequired": false,
+        "effectiveAt": null,
+        "reviewAt": "2027-01-31",
+        "locationKeys": []
+      },
+      "oshaCitations": []
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-07-30T19:47:08.226Z",
+  "title": 29,
+  "chapter": "XVII",
+  "authority": "Occupational Safety and Health Administration, Department of Labor",
+  "currentThrough": "2026-07-28",
+  "latestAmendedOn": "2026-07-24",
+  "latestIssueDate": "2026-07-24",
+  "importInProgress": false,
+  "structureUrl": "https://www.ecfr.gov/api/versioner/v1/structure/2026-07-28/title-29.json",
+  "structureSha256": "ff2f51db9dffb5bb211bf42e94d46fa528c1f6016fad3cc2f28b35f43e6f6f16",
+  "sourceNotice": "eCFR is continuously updated but is not the official legal edition of the CFR.",
+  "fullTextNotice": "The prototype indexes official metadata and links. Raw XML snapshots belong in private Supabase Storage.",
+  "generatedBy": "scripts/sync-osha-reference.mjs"
+}

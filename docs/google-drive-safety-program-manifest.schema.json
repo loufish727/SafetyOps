@@ -1,0 +1,579 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://safetyops.example/schemas/google-drive-safety-program-manifest.schema.json",
+  "title": "SafetyOps Google Drive safety-program manifest",
+  "description": "Immutable, content-addressed import manifest for a private Google Drive Safety Programs tree.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "manifestId",
+    "manifestSha256",
+    "generatedAt",
+    "tenant",
+    "source",
+    "snapshot",
+    "exportPolicy",
+    "items"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "manifestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "manifestSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "tenant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "companyId"
+      ],
+      "properties": {
+        "companyId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "connectionKey",
+        "rootFolderId",
+        "rootName",
+        "driveId",
+        "oauthScope"
+      ],
+      "properties": {
+        "provider": {
+          "const": "google-drive"
+        },
+        "connectionKey": {
+          "$ref": "#/$defs/kebabKey"
+        },
+        "rootFolderId": {
+          "type": "string",
+          "minLength": 3
+        },
+        "rootName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "driveId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "oauthScope": {
+          "const": "https://www.googleapis.com/auth/drive.readonly"
+        }
+      }
+    },
+    "snapshot": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "complete"
+          ],
+          "properties": {
+            "kind": {
+              "const": "full"
+            },
+            "complete": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "complete"
+          ],
+          "properties": {
+            "kind": {
+              "const": "partial"
+            },
+            "complete": {
+              "const": false
+            }
+          }
+        }
+      ]
+    },
+    "exportPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonicalMimeType",
+        "includeEditableExports",
+        "mimeMappings"
+      ],
+      "properties": {
+        "canonicalMimeType": {
+          "const": "application/pdf"
+        },
+        "includeEditableExports": {
+          "type": "boolean"
+        },
+        "mimeMappings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "application/pdf",
+            "application/vnd.google-apps.document",
+            "application/vnd.google-apps.spreadsheet"
+          ],
+          "properties": {
+            "application/pdf": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/mimePlan"
+              },
+              "minItems": 1
+            },
+            "application/vnd.google-apps.document": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/mimePlan"
+              },
+              "minItems": 1
+            },
+            "application/vnd.google-apps.spreadsheet": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/mimePlan"
+              },
+              "minItems": 1
+            }
+          }
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/item"
+      },
+      "minItems": 1
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "kebabKey": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+    },
+    "mimePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "mimeType",
+        "extension",
+        "exportMethod"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "canonical",
+            "editable"
+          ]
+        },
+        "mimeType": {
+          "type": "string",
+          "minLength": 3
+        },
+        "extension": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{1,10}$"
+        },
+        "exportMethod": {
+          "enum": [
+            "download",
+            "google-export"
+          ]
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "mimeType",
+        "extension",
+        "exportMethod",
+        "byteLength",
+        "sha256",
+        "stagedFile",
+        "storageObjectKey"
+      ],
+      "properties": {
+        "role": {
+          "enum": [
+            "canonical",
+            "editable"
+          ]
+        },
+        "mimeType": {
+          "type": "string",
+          "minLength": 3
+        },
+        "extension": {
+          "type": "string",
+          "pattern": "^[a-z0-9]{1,10}$"
+        },
+        "exportMethod": {
+          "enum": [
+            "download",
+            "google-export"
+          ]
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "stagedFile": {
+          "type": "string",
+          "minLength": 3
+        },
+        "storageObjectKey": {
+          "type": "string",
+          "pattern": "^[0-9a-f-]+/imports/google-drive/[a-z0-9-]+/items/[0-9a-f]{32}/versions/sha256-[0-9a-f]{64}/(?:canonical|editable)\\.[a-z0-9]{1,10}$"
+        }
+      }
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "documentType",
+        "visibility",
+        "acknowledgementRequired",
+        "effectiveAt",
+        "reviewAt",
+        "locationKeys"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 220
+        },
+        "documentType": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "visibility": {
+          "enum": [
+            "company",
+            "location",
+            "restricted"
+          ]
+        },
+        "acknowledgementRequired": {
+          "type": "boolean"
+        },
+        "effectiveAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "reviewAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "locationKeys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/kebabKey"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "oshaCitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "citation",
+        "jurisdiction",
+        "relation",
+        "sourceUrl",
+        "reviewStatus",
+        "regulatoryUnitVersionId",
+        "notes"
+      ],
+      "properties": {
+        "authority": {
+          "enum": [
+            "federal-regulation",
+            "state-regulation",
+            "statute",
+            "interpretation",
+            "directive",
+            "guidance"
+          ]
+        },
+        "citation": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 300
+        },
+        "jurisdiction": {
+          "type": "string",
+          "pattern": "^[A-Z0-9-]{2,40}$"
+        },
+        "relation": {
+          "enum": [
+            "implements",
+            "references",
+            "training-for",
+            "record-required-by",
+            "supports"
+          ]
+        },
+        "sourceUrl": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri"
+        },
+        "reviewStatus": {
+          "enum": [
+            "unverified",
+            "reviewed"
+          ]
+        },
+        "regulatoryUnitVersionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2000
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerItemId",
+        "parentProviderItemId",
+        "pathIds",
+        "pathSegments",
+        "displayPath",
+        "pathKey",
+        "name",
+        "kind",
+        "sourceMimeType",
+        "modifiedTime",
+        "providerVersion",
+        "providerMd5Checksum",
+        "sourceSizeBytes",
+        "ingestDisposition",
+        "skipReason",
+        "artifacts",
+        "document",
+        "oshaCitations"
+      ],
+      "properties": {
+        "providerItemId": {
+          "type": "string",
+          "minLength": 3
+        },
+        "parentProviderItemId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pathIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3
+          },
+          "minItems": 1
+        },
+        "pathSegments": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "minItems": 1
+        },
+        "displayPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pathKey": {
+          "type": "string",
+          "minLength": 15
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "kind": {
+          "enum": [
+            "folder",
+            "file"
+          ]
+        },
+        "sourceMimeType": {
+          "type": "string",
+          "minLength": 3
+        },
+        "modifiedTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "providerVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "providerMd5Checksum": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "sourceSizeBytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "ingestDisposition": {
+          "enum": [
+            "ingest",
+            "metadata-only"
+          ]
+        },
+        "skipReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        },
+        "document": {
+          "$ref": "#/$defs/document"
+        },
+        "oshaCitations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/oshaCitation"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "folder"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "sourceMimeType": {
+                "const": "application/vnd.google-apps.folder"
+              },
+              "ingestDisposition": {
+                "const": "metadata-only"
+              },
+              "artifacts": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "ingestDisposition": {
+                "const": "ingest"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "skipReason": {
+                "type": "null"
+              },
+              "artifacts": {
+                "minItems": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "skipReason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "artifacts": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

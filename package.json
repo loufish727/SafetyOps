@@ -1,0 +1,18 @@
+{
+  "name": "safetyops-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-location workplace safety management prototype",
+  "scripts": {
+    "dev": "http-server . -a 127.0.0.1 -p 4173 -c-1",
+    "build": "node scripts/build-static.js",
+    "sync:osha": "node scripts/sync-osha-reference.mjs",
+    "test": "playwright test",
+    "test:public-boundary": "node scripts/verify-public-build.mjs",
+    "test:smoke": "playwright test tests/smoke.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "http-server": "14.1.1"
+  }
+}
