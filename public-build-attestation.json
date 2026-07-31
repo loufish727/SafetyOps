@@ -262,8 +262,8 @@
     },
     {
       "path": "scripts/verify-public-build.mjs",
-      "bytes": 21886,
-      "sha256": "a7e4669c9f60a75f06dd64ef81739283c05ff6cf1c287c5b7a2e872d94cdbd89"
+      "bytes": 21897,
+      "sha256": "6aba4ced6396fc1f4d6d699530d1d19f8091f01f56f6cb6125cef3e9a2c97782"
     },
     {
       "path": "state-osha-reference.js",
@@ -284,46 +284,6 @@
       "path": "supabase-config.js",
       "bytes": 890,
       "sha256": "c585cc5e7e85ca5200ebb8c4eabb479be52761440fb593e76f4a750601654509"
-    },
-    {
-      "path": "supabase/.temp/gotrue-version",
-      "bytes": 8,
-      "sha256": "508b6bbfc5c3efa09a814909b6d625958045a1e833bc46ffe407649730266f77"
-    },
-    {
-      "path": "supabase/.temp/linked-project.json",
-      "bytes": 133,
-      "sha256": "c1d439f4bb31051a3dd62684f210542d7dd518f355ac92eac3a8ed2d494db564"
-    },
-    {
-      "path": "supabase/.temp/pooler-url",
-      "bytes": 92,
-      "sha256": "8b4e82cc9ebd8d108a0bf88bf6d8aa8b191f1a86ae30d82cd78e28b78a1112b7"
-    },
-    {
-      "path": "supabase/.temp/postgres-version",
-      "bytes": 10,
-      "sha256": "f95768bbc674abb5d20dc080654a38dbcd402dfcca93b95ea307b64cc6050376"
-    },
-    {
-      "path": "supabase/.temp/project-ref",
-      "bytes": 20,
-      "sha256": "433d65f9ce28d555cee212632dd5f7cbc4f3ee3001f422f4fc0f43d66ffe940d"
-    },
-    {
-      "path": "supabase/.temp/rest-version",
-      "bytes": 6,
-      "sha256": "8f17bffd259458afeca267f0c76c560a35ee9503690e41a3637d6e4df03726b0"
-    },
-    {
-      "path": "supabase/.temp/storage-migration",
-      "bytes": 33,
-      "sha256": "5eefa09f2bf47edfbd65e0307f2ebf6eec935a663b45e36cbd9395c3f10695d0"
-    },
-    {
-      "path": "supabase/.temp/storage-version",
-      "bytes": 8,
-      "sha256": "ba07e0b1550d9e95ea75e74ccec7db8060b5bcb29a5c9a19a4e26d754f32dc34"
     },
     {
       "path": "supabase/config.toml",
@@ -441,5 +401,5 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "releaseAggregateSha256": "24e779a64108a53d0f6e6c671afd82b820513d392b0a4cf2ccd08a97dfb8c578"
+  "releaseAggregateSha256": "75e0f866124aa991592dffddc4dd7f12aba730372eda6bd3d3769c2b14da89c5"
 }

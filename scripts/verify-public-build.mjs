@@ -52,6 +52,7 @@ let tenantLocationNames = [];
 let privateDenylistLoaded = false;
 const excludedReleaseScanDirectories = new Set([
   ".git",
+  ".temp",
   "dist",
   "node_modules",
   "playwright-report",
