@@ -117,13 +117,13 @@
     },
     {
       "path": "docs/KNOWN_RISKS.md",
-      "bytes": 6943,
-      "sha256": "6c4bb570af9a8c4bd50c75f93a4c4ff44154bdc2eb436526ccf4b1d744cc9e20"
+      "bytes": 6990,
+      "sha256": "811c8c079a3779800439c96eca38cb9edfb51be193906f7c5dd46ef51ba589a2"
     },
     {
       "path": "docs/LFES/CONTROL_MATRIX.md",
-      "bytes": 5810,
-      "sha256": "10e8b66df6416b554ed3fe411e90d6ec441ead097703e4aa433b0ade971cdf7c"
+      "bytes": 6062,
+      "sha256": "4af4d33684409e9913fc50d0aa6f291190b4321a85fab67c4bbc308662591126"
     },
     {
       "path": "docs/LFES/DECISIONS_AND_ASSUMPTIONS.md",
@@ -132,8 +132,8 @@
     },
     {
       "path": "docs/LFES/PROOF_MODEL.md",
-      "bytes": 3503,
-      "sha256": "a382d67ebd26200f3a0cf33b6ac492a43ef2ae22bab8cd550cb684017b4f7717"
+      "bytes": 3847,
+      "sha256": "cea25e7d61a14402447d46c09fcdfd1c375f5fa3944d7d98ab960ea362fa4050"
     },
     {
       "path": "docs/LFES/README.md",
@@ -157,13 +157,13 @@
     },
     {
       "path": "docs/QA_LOG.md",
-      "bytes": 5678,
-      "sha256": "fccf994dd56aa4cf1aa6e298517ee3cb4f9ddd61f684703251c056a57ba52848"
+      "bytes": 7445,
+      "sha256": "d016caeea8427ae348e872fadf9febad5370e40945e270cc3f9ccbc621e8b493"
     },
     {
       "path": "docs/RELEASE_CHECKLIST.md",
-      "bytes": 7886,
-      "sha256": "c9f5c8604558b1ba68d37c490b1505abe82b04bff9e8864910237db9606d4bed"
+      "bytes": 8232,
+      "sha256": "bccc120b733fe39f94a94469d3a49fc764550cffe5d9c984b0dd9503b049bd65"
     },
     {
       "path": "docs/safety-programs-schema.md",
@@ -401,5 +401,5 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "releaseAggregateSha256": "75e0f866124aa991592dffddc4dd7f12aba730372eda6bd3d3769c2b14da89c5"
+  "releaseAggregateSha256": "2857c4a342d017d3adc3326df171164d366638b9904247c8aaef45c5dc421f17"
 }

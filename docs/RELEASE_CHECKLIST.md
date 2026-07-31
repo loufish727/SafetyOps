@@ -21,7 +21,7 @@ the exact release revision and environment.
   local-denylist signature; prior approval did not carry forward.
 - [x] Confirm `supabase-config.js` contains only the intended project URL and
   publishable/anon key.
-- [ ] Publish only from the sanitized clean-history release repository; never
+- [x] Publish only from the sanitized clean-history release repository; never
   push the working source repository or its prior history.
 - [ ] Record release-key and private-denylist custody, backup, rotation, and
   recovery ownership.
@@ -36,6 +36,8 @@ the exact release revision and environment.
 - [x] The targeted program-form submission test passed on desktop and mobile.
 - [x] Pass static checks and the complete browser suite again for the exact
   release revision.
+- [x] Verify the connected invite-only sign-in shell at a cache-busted live
+  GitHub Pages URL on desktop.
 - [ ] Verify configuration-required, signed-out, onboarding, empty, loading,
   error, and retry states against the intended hosted configuration.
 - [ ] Verify prior IndexedDB staging blobs can be explicitly cleared.
@@ -57,14 +59,19 @@ the exact release revision and environment.
 - [ ] Configure production SMTP before invitation or recovery mail to external,
   non-organization recipients. The initial owner is an organization-team
   address and can use Supabase's restricted default sender for this bootstrap.
-- [ ] Prove both historical browser company-creation RPC overloads are absent,
+- [x] Prove both historical browser company-creation RPC overloads are absent,
   the owner bootstrap is service-only, and system provisioning is not falsely
   attributed to the invited owner.
 - [ ] Prove jurisdiction reviewer identity/time are database-derived and a
   manager cannot spoof review fields through direct Data API writes.
-- [ ] Verify functions compile, RLS is enabled, policies/grants exist, and each
-  security-definer function has the intended owner and pinned `search_path`.
-- [ ] Verify private buckets are nonpublic and paths are company-prefixed.
+- [x] Verify every public table has RLS enabled, the owner bootstrap grant is
+  service-only, and no reviewed security-definer function lacks a pinned
+  `search_path`.
+- [ ] Complete the full policy/grant, function-owner, and trigger-installation
+  assertion matrix.
+- [x] Verify all configured Storage buckets are nonpublic.
+- [ ] Prove private object paths are company-prefixed for authorized and denied
+  upload/download cases.
 - [ ] Run two-company and cross-location read/write denial tests for every role
   through direct Data API, RPC, Storage, and UI paths.
 - [ ] Verify migration `009` records `review_required` with zero regulatory
@@ -93,9 +100,9 @@ the exact release revision and environment.
 
 ## Functional hosted proof — LFES-TRACE-001
 
-- [ ] Create a company with five named locations and assign the correct
+- [x] Create a company with five named locations and assign the correct
   OR/WA/CA jurisdiction context to each.
-- [ ] Confirm onboarding creates review-required context rather than silently
+- [x] Confirm onboarding creates review-required context rather than silently
   asserting approved applicability.
 - [ ] Create and reload an inspection, incident, corrective action, training
   assignment, program assignment, acknowledgement, and signed program form.
@@ -126,8 +133,9 @@ the exact release revision and environment.
   shared `github.io` origin.
 - [ ] Record release revision, database migration state, Edge Function
   revision, and v2 attestation identity.
-- [ ] Make the exact-revision GitHub Actions verification/deploy workflow green
-  and smoke the hosted URL with a cache-bust query on desktop and mobile.
+- [x] Make the exact-revision GitHub Actions verification/deploy workflow green
+  and smoke the hosted URL with a cache-bust query on desktop.
+- [ ] Complete the cache-busted live mobile smoke.
 - [ ] Verify a real authorized QA tenant without adding production PII.
 - [ ] Confirm logs and audit events are observable and contain no secrets.
 - [ ] Document and rehearse frontend rollback plus database backup/restore or

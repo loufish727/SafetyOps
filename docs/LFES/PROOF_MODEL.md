@@ -10,9 +10,9 @@ higher layer passed.
 | Signed public release | The exact 12-file `dist` artifact and exact sanitized release tree match the local private-denylist approval. | PROVEN for the signed release: strict Ed25519 v2 schema, signature, both aggregates, and both exact file lists verified in CI |
 | Clean local PostgreSQL | Migrations compile in order; functions, constraints, triggers, RLS, and grants exist in the catalog. | NOT RUN (`001`–`012`); local Docker is unavailable |
 | Hosted versioned application/upgrade | Migration versions are recorded without pending history, and the final compatibility sequence compiles/applies. | PASS: ledger aligned through `012`; `010`–`012` compiled/applied. Legacy file-checksum identity, catalog assertions, and hostile-role runtime tests remain open |
-| Hosted anonymous | Anonymous Data API, RPC, Storage, and function boundaries reject unauthorized use. | NOT RUN |
+| Hosted anonymous | Anonymous Data API, privileged RPC, signup, and private-bucket listing disclose no tenant material. | PARTIAL: Data API and privileged RPC returned 401, signup returned 422, and private-bucket listing returned zero objects; broader endpoint coverage remains open |
 | Hosted authenticated roles | Two-company and cross-location allow/deny behavior works for each SafetyOps role. | NOT RUN |
-| Hosted functional | Onboarding, inspections, incidents, actions, training, programs, signatures, and private files persist correctly. | NOT RUN |
+| Hosted functional | Onboarding, inspections, incidents, actions, training, programs, signatures, and private files persist correctly. | PARTIAL: invited-owner and five-location bootstrap persisted with draft/review-required context and system audit provenance; invite acceptance and ordinary workflows remain untested |
 | Regulatory review | Location jurisdiction and company controls are reviewed against current official sources by qualified reviewers. | NOT RUN |
 | LFES engineering review | Architecture, security, reliability, deployment, rollback, and residual risk are reviewed together against the 2026-06-10 private-packet baseline. | IN PROGRESS; not an LFES certification |
 
