@@ -1,4 +1,12 @@
 const { test, expect } = require("@playwright/test");
+const {
+  WORKSPACE_FIXTURE,
+  configureAuthenticatedWorkspace
+} = require("./helpers/authenticated-workspace");
+
+test.beforeEach(async ({ page }) => {
+  await configureAuthenticatedWorkspace(page);
+});
 
 async function openGuide(page, projectName) {
   await page.goto("/");
@@ -13,8 +21,10 @@ async function openGuide(page, projectName) {
 test("OSHA guide searches the full corpus and opens a source trace", async ({ page }, testInfo) => {
   await openGuide(page, testInfo.project.name);
 
-  await expect(page.getByText(/1,547 provisions/)).toBeVisible();
-  await expect(page.getByText(/current through 2026-07-28/i).first()).toBeVisible();
+  await page.getByRole("tab", { name: "Federal baseline" }).click();
+  await expect(page.getByText(/1,547 in view/)).toBeVisible();
+  const currentThrough = await page.evaluate(() => window.SafetyOpsRegulatoryData.meta.currentThrough);
+  await expect(page.getByText(new RegExp(`current through ${currentThrough}`, "i")).first()).toBeVisible();
 
   await page.getByLabel("Search citations, titles, topics, and summaries").fill("1910.178");
   await page.getByRole("button", { name: "Search guide" }).click();
@@ -39,29 +49,54 @@ test("OSHA guide searches the full corpus and opens a source trace", async ({ pa
 test("guide changes jurisdiction context by location", async ({ page }, testInfo) => {
   await openGuide(page, testInfo.project.name);
 
-  const contexts = await page.evaluate(() => {
-    const locationName = (id) => window.SafetyOpsData.locations.find((item) => item.id === id)?.name;
-    return window.SafetyOpsRegulatoryData.statePlans
-      .filter((item) => item.jurisdiction !== "US-FED" && item.locationIds.some((id) => locationName(id)))
-      .slice(0, 2)
-      .map((item) => ({
-        planName: item.name,
-        locationId: item.locationIds.find((id) => locationName(id)),
-        locationName: locationName(item.locationIds.find((id) => locationName(id)))
-      }));
-  });
-  expect(contexts).toHaveLength(2);
+  const citations = await page.evaluate(() => Object.fromEntries(
+    ["OR", "WA", "CA"].map((stateCode) => [
+      stateCode,
+      window.SafetyOpsStateRegulatoryData.standards.find((item) => item.stateCode === stateCode)?.citation
+    ])
+  ));
+  const planNames = {
+    OR: "Oregon OSHA",
+    WA: "Washington DOSH",
+    CA: "Cal/OSHA"
+  };
+  const contexts = WORKSPACE_FIXTURE.locations.map((location) => ({
+    planName: planNames[location.stateCode],
+    jurisdiction: location.jurisdiction,
+    locationId: location.id,
+    locationName: location.name,
+    citation: citations[location.stateCode]
+  }));
+  expect(contexts.every((item) => item.locationId && item.citation)).toBe(true);
 
-  await page.getByLabel("Filter by location").selectOption(contexts[0].locationId);
-  await expect(page.locator(".page-heading")).toContainText(contexts[0].locationName);
-  await expect(page.getByText(contexts[0].planName, { exact: true })).toBeVisible();
-  await expect(page.getByText("Federal OSHA", { exact: true })).toBeVisible();
+  for (const context of contexts) {
+    await page.getByLabel("Filter by location").selectOption(context.locationId);
+    await expect(page.locator(".page-heading")).toContainText(context.locationName);
+    await expect(page.getByText(context.planName, { exact: true })).toBeVisible();
+    await expect(page.getByText("Federal OSHA", { exact: true })).toBeVisible();
+    await expect(page.getByText("Jurisdiction review required", { exact: true }).first()).toBeVisible();
+    const stateResult = page.locator(".standard-result-card").filter({ hasText: context.citation }).first();
+    await expect(stateResult).toBeVisible();
+    await expect(stateResult.getByText(context.jurisdiction, { exact: true })).toBeVisible();
+  }
+});
 
-  await page.getByLabel("Filter by location").selectOption(contexts[1].locationId);
-  await expect(page.locator(".page-heading")).toContainText(contexts[1].locationName);
-  await expect(page.getByText(contexts[1].planName, { exact: true })).toBeVisible();
-  await expect(page.getByText("Federal OSHA", { exact: true })).toBeVisible();
-  await expect(page.getByText(contexts[0].planName, { exact: true })).toBeHidden();
+test("state trace is explicit about pending source snapshots", async ({ page }, testInfo) => {
+  await openGuide(page, testInfo.project.name);
+  const citation = await page.evaluate(() =>
+    window.SafetyOpsStateRegulatoryData.standards.find((item) => item.stateCode === "OR").citation
+  );
+  const context = {
+    locationId: WORKSPACE_FIXTURE.locations[0].id,
+    citation
+  };
+  await page.getByLabel("Filter by location").selectOption(context.locationId);
+  const result = page.locator(".standard-result-card").filter({ hasText: context.citation }).first();
+  await result.getByRole("button", { name: "View trace" }).click();
+  const drawer = page.locator(".reference-drawer");
+  await expect(drawer.getByText("Official link verified", { exact: true })).toBeVisible();
+  await expect(drawer.getByText("Pending server-side source snapshot", { exact: true })).toBeVisible();
+  await expect(drawer.getByText(/not yet a compliance-ready legal determination/i)).toBeVisible();
 });
 
 test("opening a question trace preserves an in-progress inspection", async ({ page }, testInfo) => {

@@ -1,4 +1,12 @@
 const { test, expect } = require("@playwright/test");
+const { configureAuthenticatedWorkspace } = require("./helpers/authenticated-workspace");
+
+test.beforeEach(async ({ page }, testInfo) => {
+  await configureAuthenticatedWorkspace(page, {
+    programFixture:
+      testInfo.title === "a program form submits without caller-authored evidence hashes"
+  });
+});
 
 async function openProgramLibrary(page, projectName) {
   if (projectName === "mobile") {
@@ -31,37 +39,60 @@ test("private safety program library exposes source trace and folders", async ({
   await expect(page.getByText("External source identity — not a content hash", { exact: true })).toBeVisible();
 });
 
-test("a mapped source form can be signed and submitted with lineage", async ({ page }, testInfo) => {
+test("a program form submits without caller-authored evidence hashes", async ({ page }, testInfo) => {
   await openProgramLibrary(page, testInfo.project.name);
-  await requirePrivateLibrary(page);
-  const expectedSourceId = await page.evaluate(() =>
-    window.SafetyOpsProgramLibrary.forms.find((item) => item.id === "form-ppe-ack")?.sourceId
-  );
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
   await page.getByRole("tab", { name: /Templates/ }).click();
 
-  const card = page.locator(".program-card").filter({ hasText: "Acknowledgment of Personal Protective Equipment Usage" });
+  const card = page.locator(".program-card").filter({ hasText: "Test safety acknowledgement" });
   await card.getByRole("button", { name: "Start form" }).click();
 
-  await page.getByLabel("Employee name *").fill("Prototype Worker");
-  await page.locator('label[for="form-ppe-ack-acknowledgment-yes"]').click();
-  await page.getByLabel("Employee signature *").fill("Prototype Worker");
-  await page.getByLabel("Employee signature date *").fill("2026-07-30");
-  await page.getByLabel("Trainer name (print) *").fill("Prototype Trainer");
-  await page.getByLabel("Manager name (print) *").fill("Prototype Manager");
-  await page.getByLabel("Manager signature *").fill("Prototype Manager");
-  await page.getByLabel("Manager signature date *").fill("2026-07-30");
+  await page.getByLabel("Employee name *").fill("Test Worker");
+  await page.getByText("I acknowledge this statement", { exact: true }).click();
+  await page.getByLabel("Worker signature *").fill("Test Worker");
   await page.getByRole("button", { name: "Sign & submit" }).click();
 
   await expect(page.getByText("Digital form submitted", { exact: true })).toBeVisible();
-  const records = await page.evaluate(() => JSON.parse(localStorage.getItem("safetyops.formSubmissions") || "[]"));
-  expect(records).toHaveLength(1);
-  expect(records[0]).toMatchObject({
-    formId: "form-ppe-ack",
-    status: "Submitted",
-    sourceId: expectedSourceId
+
+  const evidenceWrites = await page.evaluate(() => {
+    const calls = window.__safetyOpsFakeDb?.calls || [];
+    return {
+      submit: calls.find((call) => call.method === "rpc" && call.name === "submit_safety_program_form"),
+      draft: calls.find((call) =>
+        call.method === "insert" && call.table === "safety_program_form_submissions"
+      ),
+      signatures: calls.find((call) =>
+        call.method === "insert" && call.table === "safety_program_form_signatures"
+      ),
+      stored: window.__safetyOpsFakeDb?.tables?.safety_program_form_submissions?.[0],
+      storedSignatures:
+        window.__safetyOpsFakeDb?.tables?.safety_program_form_signatures || []
+    };
   });
-  expect(records[0].citations).toContain("29 CFR 1910.132");
+  expect(evidenceWrites.submit?.payload).toEqual({
+    target_submission_id: expect.any(String)
+  });
+  expect(evidenceWrites.draft?.rows?.[0]).not.toHaveProperty("submission_context");
+  for (const signature of evidenceWrites.signatures?.rows || []) {
+    expect(signature).not.toHaveProperty("signer_name_snapshot");
+    expect(signature).not.toHaveProperty("signer_role_snapshot");
+    expect(signature).not.toHaveProperty("signature_method");
+    expect(signature).not.toHaveProperty("signature_intent");
+    expect(signature).not.toHaveProperty("signed_payload_sha256");
+    expect(signature).not.toHaveProperty("signature_sha256");
+    expect(signature).not.toHaveProperty("signature_record");
+  }
+  for (const signature of evidenceWrites.storedSignatures) {
+    expect(signature.signer_name_snapshot).toBe("Morgan Reed");
+    expect(signature.signer_role_snapshot).toBe("corporate_admin");
+  }
+  expect(evidenceWrites.stored).toMatchObject({
+    status: "submitted",
+    submitted_payload_sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+    submission_context: {
+      contextVersion: "safetyops-form-submission-context-v1"
+    }
+  });
 });
 
 test("verified original forms can be previewed and downloaded", async ({ page }, testInfo) => {
@@ -92,7 +123,7 @@ test("verified original forms can be previewed and downloaded", async ({ page },
 test("a company form upload is fingerprinted, persisted, and downloadable", async ({ page }, testInfo) => {
   await openProgramLibrary(page, testInfo.project.name);
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
-  await page.getByRole("button", { name: "Upload company form" }).click();
+  await page.getByRole("button", { name: "Stage form locally" }).click();
 
   await page.getByLabel("Source file").setInputFiles({
     name: "weekly-safety-check.pdf",
@@ -103,7 +134,7 @@ test("a company form upload is fingerprinted, persisted, and downloadable", asyn
   await page.getByRole("button", { name: "Fingerprint & save locally" }).click();
 
   await expect(page.getByText("Company form saved locally", { exact: true })).toBeVisible();
-  await expect(page.getByRole("tab", { name: /My uploads/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: /Local staging/ })).toHaveAttribute("aria-selected", "true");
   const card = page.locator(".form-file-card").filter({ hasText: "Weekly safety check" });
   await expect(card.getByText("Local only", { exact: true })).toBeVisible();
   await expect(card).toContainText("SHA-256");

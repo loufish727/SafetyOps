@@ -33,14 +33,14 @@ jobs:
       - name: Install browser
         run: npx playwright install --with-deps chromium
 
-      - name: Run responsive prototype tests
+      - name: Run responsive application tests
         run: npm test
 
       - name: Build static site
         run: npm run build
 
-      - name: Verify public-data boundary
-        run: npm run test:public-boundary
+      - name: Verify public-data boundary and local approval attestation
+        run: npm run test:public-boundary:ci
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4

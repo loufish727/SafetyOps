@@ -1,0 +1,24 @@
+# SafetyOps Decisions and Assumptions
+
+These are engineering constraints, not verified compliance conclusions.
+
+| Decision or assumption | Consequence |
+|---|---|
+| The source baseline is the LFES Full Private Packet generated 2026-06-10, including inherited Gold, Core, Security, Database, Reliability, Reviewability, and Deployment standards. | SafetyOps records implementation/proof against those meanings; it does not claim LFES certification. Private packet paths or content are never published. |
+| GitHub Pages is a public static host. | No tenant record, private source identity, original form, credential, or service secret may be required from the repository bundle. |
+| Supabase is the intended system of record. | Browser fixtures and IndexedDB staging are not durable company records. RLS must be proven before real data is entered. |
+| The public shell contains no demo tenant. | A missing Supabase URL/key shows a configuration-required screen; it must not fall back to fictional company data. |
+| The release authority is a local private denylist and Ed25519 key. | Attestation v2 signs the exact deployable artifact and sanitized release tree; CI verifies exact lists/aggregates but never receives private tenant markers or the signing key. |
+| Account-level GitHub Pages repositories share one origin. | Persistent auth remains off on the shared `github.io` host; enabling it requires a dedicated custom domain and reviewed Auth/Edge origin allowlists. |
+| The initial operating model is one company with about five locations. | Schema and RLS still preserve future multi-company isolation; testing must use at least two companies. |
+| Initial state coverage is Oregon, Washington, and California. | Other states are unsupported until their catalog, onboarding rules, source monitoring, and review process are added. |
+| A location state selection is only a fact supplied during onboarding. | New jurisdiction profiles and assignments remain draft/review-required; the state code alone cannot approve applicability. |
+| Draft regulatory review must not block ordinary field inspection work. | Migration `009` preserves the latest profile/jurisdiction facts as `review_required` and emits zero compliance-evidence links until every required review edge is approved/effective. |
+| A browser must not author signature evidence. | Migration `010` accepts only pinned signature entity IDs and derives signer identity/role, method, intent, time, unsigned-payload digest, signature record, and signature hash in PostgreSQL; this remains DESIGNED/UNPROVEN until database tests run. |
+| Existing drafts do not preserve revoked authority. | Terminal form submission rechecks active company membership and current location access, while inspection updates cannot change the original company, location, creator, idempotency key, or pinned template identity. |
+| Regulatory catalogs are reference aids. | The federal structural index is full through 2026-07-29; the 30 state records are a curated high-use subset. Neither replaces current official text, complete applicability analysis, or qualified safety/legal review. |
+| State source links were checked, but state source bytes were not hashed. | UI and evidence must continue to show the pending source-snapshot boundary. |
+| Private file access requires a server-side authorization service. | Original-form download and answer attachments remain unavailable until the Edge/upload services and private Storage controls are deployed and tested. |
+| Source SQL is not runtime proof. | Migrations `001`–`010`, RLS, RPC, hash, and auditor controls remain DESIGNED/UNPROVEN until applied and tested in a dedicated project. |
+| Workspace reads use explicit caps rather than pagination. | The first load is bounded, but tenants approaching a cap need deterministic pagination, truncation indicators, and on-demand detail loading. |
+| The current app is online-first. | Offline mutation queues, conflict resolution, retry idempotency, and weak-network recovery remain future work. |

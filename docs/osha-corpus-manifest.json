@@ -1,15 +1,15 @@
 {
-  "generatedAt": "2026-07-30T19:47:08.226Z",
+  "generatedAt": "2026-07-30T23:15:43.466Z",
   "title": 29,
   "chapter": "XVII",
   "authority": "Occupational Safety and Health Administration, Department of Labor",
-  "currentThrough": "2026-07-28",
-  "latestAmendedOn": "2026-07-24",
-  "latestIssueDate": "2026-07-24",
+  "currentThrough": "2026-07-29",
+  "latestAmendedOn": "2026-07-29",
+  "latestIssueDate": "2026-07-29",
   "importInProgress": false,
-  "structureUrl": "https://www.ecfr.gov/api/versioner/v1/structure/2026-07-28/title-29.json",
-  "structureSha256": "ff2f51db9dffb5bb211bf42e94d46fa528c1f6016fad3cc2f28b35f43e6f6f16",
+  "structureUrl": "https://www.ecfr.gov/api/versioner/v1/structure/2026-07-29/title-29.json",
+  "structureSha256": "811e1d1ad423f754786e357c7918b83b38a59ad5bd090c46e1dd5e86d01bf071",
   "sourceNotice": "eCFR is continuously updated but is not the official legal edition of the CFR.",
-  "fullTextNotice": "The prototype indexes official metadata and links. Raw XML snapshots belong in private Supabase Storage.",
+  "fullTextNotice": "SafetyOps indexes official metadata and links. Raw XML snapshots belong in private Supabase Storage.",
   "generatedBy": "scripts/sync-osha-reference.mjs"
 }

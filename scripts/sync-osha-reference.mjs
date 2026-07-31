@@ -295,7 +295,7 @@ const statePlans = [
     coverage: "Private and public-sector state plan",
     officialUrl: "https://osha.oregon.gov/rules/Pages/default.aspx",
     citationFamily: "OAR Chapter 437",
-    locationIds: ["north"],
+    locationIds: [],
     note: "Oregon rules can adopt, modify, or supplement federal requirements."
   },
   {
@@ -307,7 +307,7 @@ const statePlans = [
     officialUrl: "https://www.lni.wa.gov/safety-health/safety-rules/rules-by-chapter/",
     legalCodeUrl: "https://app.leg.wa.gov/WAC/default.aspx?cite=296",
     citationFamily: "Title 296 WAC",
-    locationIds: ["west"],
+    locationIds: [],
     note: "The official Washington Administrative Code controls when convenience PDFs differ."
   },
   {
@@ -323,39 +323,9 @@ const statePlans = [
   }
 ];
 
-const regulatoryLinks = [
-  link("inspection_template", "tpl-daily", "req-1910-22-a-1", "verifies", "The daily inspection checks walking and working surfaces."),
-  link("inspection_template", "tpl-daily", "req-1910-212-a-1", "verifies", "The template includes a general machine-guarding observation."),
-  link("inspection_template", "tpl-jha", "req-1910-132-d", "supports", "The JHA supports documented PPE hazard assessment."),
-  link("inspection_template", "tpl-forklift", "req-1910-178-q-7", "verifies", "Pre-use findings determine whether a truck must be removed from service."),
-  link("inspection_template", "tpl-eyewash", "req-1910-151-c", "verifies", "The inspection checks access and apparent readiness of emergency flushing facilities."),
-  link("inspection_template", "tpl-incident", "req-1904-29", "supports", "Incident intake preserves facts needed for recordkeeping review."),
-  link("inspection_template", "tpl-incident", "req-1904-39", "supports", "The intake triggers immediate review of severe-event reporting duties."),
-  link("training_course", "course-loto", "req-1910-147-c-7", "trains", "The course addresses employee energy-control responsibilities."),
-  link("training_course", "course-hazcom", "req-1910-1200-h", "trains", "The course addresses required workplace chemical hazard communication."),
-  link("training_course", "course-forklift", "req-1910-178-l", "trains", "The course supports operator training and evaluation records."),
-  link("document", "DOC-013", "req-1910-38", "implements", "The controlled document is the company emergency action plan."),
-  link("document", "DOC-012", "req-1910-178-l", "implements", "The SOP defines company powered-industrial-truck operating controls."),
-  link("document", "DOC-011", "req-1904-39", "supports", "The investigation standard includes severe-event escalation."),
-  link("document", "DOC-010", "req-1910-134-c", "implements", "The document is the worksite respiratory protection program."),
-  link("corrective_action", "ACT-087", "req-1910-178-l", "supports", "The traffic-plan update responds to a powered-industrial-truck incident.")
-];
-
-function link(entityType, entityId, requirementId, relation, rationale) {
-  return {
-    id: `link-${entityType}-${entityId}-${requirementId}`,
-    entityType,
-    entityId,
-    requirementId,
-    relation,
-    rationale,
-    status: "verified",
-    linkedBy: "Alex Morgan",
-    linkedAt: "2026-07-30T16:00:00Z",
-    verifiedBy: "Corporate Safety",
-    verifiedAt: "2026-07-30T16:30:00Z"
-  };
-}
+// Company controls and evidence links are tenant data. They load from
+// authenticated Supabase rows and are never generated into this public file.
+const regulatoryLinks = [];
 
 async function fetchOfficial(url) {
   const response = await fetch(url, {
@@ -551,7 +521,7 @@ const dataset = {
     structureUrl,
     structureSha256: sha256(structureResponse.content),
     sourceNotice: "eCFR is continuously updated but is not the official legal edition of the CFR.",
-    fullTextNotice: "The prototype indexes official metadata and links. Raw XML snapshots belong in private Supabase Storage.",
+      fullTextNotice: "SafetyOps indexes official metadata and links. Raw XML snapshots belong in private Supabase Storage.",
     generatedBy: "scripts/sync-osha-reference.mjs"
   },
   parts,

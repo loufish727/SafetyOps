@@ -14,6 +14,12 @@
     statePlans: [],
     parts: []
   };
+  const stateRegulatory = window.SafetyOpsStateRegulatoryData || {
+    meta: {},
+    jurisdictions: [],
+    standards: [],
+    resources: []
+  };
   const programLibrary = window.SafetyOpsProgramLibrary || {
     meta: { counts: {} },
     programs: [],
@@ -33,6 +39,7 @@
     standardPart: "all",
     standardScope: "all",
     standardMode: "featured",
+    standardAuthority: localStorage.getItem(`${uiStoragePrefix}standardAuthority`) || "location",
     referenceId: null,
     programCategory: "programs",
     programQuery: "",
@@ -43,7 +50,7 @@
     activeFormId: null,
     modal: null,
     selectedTemplateId: null,
-    authStatus: "demo",
+    authStatus: "configuration-required",
     authMode: "sign-in",
     authUser: null,
     authMessage: "",
@@ -59,8 +66,18 @@
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   ]);
   const allowedFormUploadExtensions = new Set(["pdf", "docx", "xlsx"]);
+  const localUploadStagingEnabled = (
+    window.SAFETYOPS_ENABLE_LOCAL_UPLOAD_STAGING === true
+    && ["127.0.0.1", "localhost"].includes(window.location.hostname)
+  );
   if (!["originals", "uploads", "templates"].includes(state.formLibraryMode)) {
     state.formLibraryMode = "originals";
+  }
+  if (!localUploadStagingEnabled && state.formLibraryMode === "uploads") {
+    state.formLibraryMode = "originals";
+  }
+  if (!["location", "federal", "combined"].includes(state.standardAuthority)) {
+    state.standardAuthority = "location";
   }
 
   const hasSupabaseConfig = Boolean(
@@ -77,13 +94,20 @@
     try {
       supabaseClient = window.supabase.createClient(
         window.SAFETYOPS_SUPABASE_URL,
-        window.SAFETYOPS_SUPABASE_ANON_KEY
+        window.SAFETYOPS_SUPABASE_ANON_KEY,
+        {
+          auth: {
+            persistSession: window.SAFETYOPS_ENABLE_PERSISTENT_AUTH_SESSION === true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+          }
+        }
       );
     } catch (_error) {
       supabaseClient = null;
     }
   }
-  state.authStatus = supabaseClient ? "loading" : "demo";
+  state.authStatus = supabaseClient ? "loading" : "configuration-required";
 
   document.documentElement.dataset.theme = state.theme;
 
@@ -92,16 +116,16 @@
       label: "Overview",
       items: [
         { id: "dashboard", label: "Command center", icon: "01" },
-        { id: "my-work", label: "My work", icon: "✓", count: 5 }
+        { id: "my-work", label: "My work", icon: "✓" }
       ]
     },
     {
       label: "Safety operations",
       items: [
         { id: "inspections", label: "Forms & inspections", icon: "F" },
-        { id: "training", label: "Training", icon: "T", count: 12 },
-        { id: "incidents", label: "Incidents", icon: "!", count: 2, danger: true },
-        { id: "actions", label: "Corrective actions", icon: "A", count: 5 }
+        { id: "training", label: "Training", icon: "T" },
+        { id: "incidents", label: "Incidents", icon: "!", danger: true },
+        { id: "actions", label: "Corrective actions", icon: "A" }
       ]
     },
     {
@@ -179,7 +203,7 @@
       description: "Standardize the company program while preserving local owners, schedules, risks, and performance."
     },
     settings: {
-      eyebrow: "Prototype administration",
+      eyebrow: "Workspace administration",
       title: "Workspace settings",
       description: "Configure organization rules, permissions, notifications, and the Supabase connection model."
     },
@@ -209,7 +233,10 @@
 
   function filterLocation(records) {
     if (state.locationId === "all") return records;
-    return records.filter((record) => record.locationId === state.locationId);
+    return records.filter((record) => (
+      record.locationId === state.locationId
+      || (record.locationIds || []).includes(state.locationId)
+    ));
   }
 
   function locationName(id) {
@@ -244,12 +271,100 @@
     return regulatory.requirements.find((requirement) => requirement.id === id);
   }
 
+  function allStandards() {
+    return [
+      ...stateRegulatory.standards.map((standard) => ({
+        ...standard,
+        catalogType: "state",
+        bindingLevel: standard.bindingLevel || "state-plan"
+      })),
+      ...regulatory.standards.map((standard) => ({
+        ...standard,
+        catalogType: "federal",
+        jurisdiction: standard.jurisdiction || "US-FED"
+      }))
+    ];
+  }
+
   function standardById(id) {
-    return regulatory.standards.find((standard) => standard.id === id);
+    return allStandards().find((standard) => standard.id === id);
   }
 
   function standardByIdentifier(identifier) {
-    return regulatory.standards.find((standard) => standard.identifier === identifier);
+    return allStandards().find((standard) => standard.identifier === identifier);
+  }
+
+  function jurisdictionForLocation(location) {
+    if (!location) return "US-FED";
+    if (location.jurisdiction) return location.jurisdiction;
+    const stateCode = String(location.stateCode || "").toUpperCase();
+    if (["OR", "WA", "CA"].includes(stateCode)) return `US-${stateCode}`;
+    const configuredPlan = regulatory.statePlans.find((plan) =>
+      Array.isArray(plan.locationIds) && plan.locationIds.includes(location.id)
+    );
+    return configuredPlan?.jurisdiction || "US-FED";
+  }
+
+  function planForJurisdiction(jurisdiction) {
+    const federalCode = jurisdiction === "US-FED-OSHA" ? "US-FED" : jurisdiction;
+    const legacyPlan = regulatory.statePlans.find((plan) =>
+      plan.jurisdiction === federalCode ||
+      (federalCode === "US-FED" && plan.jurisdiction === "US-FED-OSHA")
+    );
+    const statePlan = stateRegulatory.jurisdictions.find((plan) =>
+      plan.jurisdiction === federalCode || plan.code === federalCode || plan.id === federalCode
+    );
+    if (!statePlan) return legacyPlan || null;
+    return {
+      ...(legacyPlan || {}),
+      ...statePlan,
+      jurisdiction: statePlan.jurisdiction || statePlan.code || statePlan.id,
+      name: legacyPlan?.name || statePlan.programName || statePlan.name,
+      officialUrl: statePlan.officialUrl || statePlan.officialRulesUrl,
+      legalCodeUrl: statePlan.legalCodeUrl || legacyPlan?.legalCodeUrl,
+      coverage: statePlan.coverage || statePlan.coverageSummary || legacyPlan?.coverage || "State-plan occupational safety and health authority.",
+      note: statePlan.note || legacyPlan?.note || "Verify the reviewed location profile, industry, activity, and any federal retained-jurisdiction exception."
+    };
+  }
+
+  function jurisdictionLabel(jurisdiction) {
+    return planForJurisdiction(jurisdiction)?.name
+      || ({
+        "US-OR": "Oregon OSHA",
+        "US-WA": "Washington DOSH",
+        "US-CA": "Cal/OSHA",
+        "US-FED": "Federal OSHA"
+      })[jurisdiction]
+      || jurisdiction;
+  }
+
+  function locationRegulatoryContext(locationId = state.locationId) {
+    if (locationId === "all") {
+      const jurisdictions = [...new Set(data.locations.map(jurisdictionForLocation))];
+      return {
+        locationId,
+        jurisdiction: "MULTI",
+        jurisdictionName: "Location-specific authorities",
+        jurisdictions,
+        profileStatus: data.locations.length > 0
+          && data.locations.every((location) => location.regulatoryProfileStatus === "approved")
+          ? "approved"
+          : "review_required",
+        regulatoryProfileId: null
+      };
+    }
+    const location = locationById(locationId);
+    const jurisdiction = jurisdictionForLocation(location);
+    return {
+      locationId,
+      jurisdiction,
+      jurisdictionName: jurisdictionLabel(jurisdiction),
+      jurisdictions: [jurisdiction],
+      stateCode: location?.stateCode || null,
+      profileStatus: location?.regulatoryProfileStatus || "review_required",
+      regulatoryProfileId: location?.regulatoryProfileId || null,
+      coverageStatus: location?.regulatoryCoverageStatus || "requires_review"
+    };
   }
 
   function regulatoryLinksFor(entityType, entityId) {
@@ -312,6 +427,50 @@
     `;
   }
 
+  function stateStandardsForInspection(templateId, jurisdiction) {
+    const template = data.inspectionTemplates.find((item) => item.id === templateId);
+    const templateText = `${template?.name || ""} ${template?.category || ""}`.toLowerCase();
+    let terms = ["rules for all workplaces", "accident prevention program", "injury and illness prevention program"];
+    if (/(incident|injury|record|report)/.test(templateText)) {
+      terms = ["reporting", "recordkeeping", "occupational injury and illness records"];
+    } else if (/(forklift|powered industrial|industrial truck)/.test(templateText)) {
+      terms = ["powered industrial truck", "forklift", "industrial trucks"];
+    } else if (/(hazard analysis|jha|personal protective|ppe)/.test(templateText)) {
+      terms = ["personal protective equipment", "personal protective devices"];
+    } else if (/(machine|guard)/.test(templateText)) {
+      terms = ["machine safety", "guarding required"];
+    } else if (/(lockout|tagout|energy control)/.test(templateText)) {
+      terms = ["lockout/tagout", "control of hazardous energy"];
+    }
+    if (!terms.length || ["US-FED", "US-FED-OSHA"].includes(jurisdiction)) return [];
+    return stateRegulatory.standards
+      .filter((standard) => {
+        if (standard.jurisdiction !== jurisdiction) return false;
+        const haystack = `${standard.title} ${standard.citation} ${(standard.topics || []).join(" ")}`.toLowerCase();
+        return terms.some((term) => haystack.includes(term));
+      })
+      .slice(0, 2);
+  }
+
+  function renderStateInspectionChips(templateId, jurisdiction) {
+    const standards = stateStandardsForInspection(templateId, jurisdiction);
+    if (!standards.length) return "";
+    return `
+      <div class="citation-strip" aria-label="Location rule overlay">
+        <span class="trace-label">Location rule overlay</span>
+        ${standards.map((standard) => `
+          <button
+            class="citation-chip"
+            type="button"
+            data-action="open-reference"
+            data-reference-id="${standard.id}"
+            aria-label="Open trace for ${escapeHtml(standard.citation)}"
+          >${escapeHtml(standard.citation)}</button>
+        `).join("")}
+      </div>
+    `;
+  }
+
   function entityLabel(entityType, entityId) {
     const collections = {
       inspection_template: data.inspectionTemplates,
@@ -353,8 +512,15 @@
     const title = requirement?.heading || standard.title;
     const summary = requirement?.summary || standard.summary || "Open the official source for the complete provision and its context.";
     const officialUrl = requirement?.officialUrl || standard.officialUrl;
-    const currentThrough = requirement?.currentThrough || standard.currentThrough || regulatory.meta.currentThrough;
-    const sourceHash = requirement?.sourceSha256 || standard.sourceSha256 || regulatory.meta.structureSha256;
+    const stateSource = standard?.catalogType === "state" || (
+      standard?.jurisdiction && !["US-FED", "US-FED-OSHA"].includes(standard.jurisdiction)
+    );
+    const sourceDate = stateSource
+      ? (standard.checkedOn || stateRegulatory.meta.checkedOn)
+      : (requirement?.currentThrough || standard.currentThrough || regulatory.meta.currentThrough);
+    const sourceHash = requirement?.sourceSha256
+      || standard.sourceSha256
+      || (stateSource ? null : regulatory.meta.structureSha256);
     const requirementIds = requirement
       ? [requirement.id]
       : regulatory.requirements
@@ -377,7 +543,8 @@
         <div class="reference-drawer-body">
           <div class="reference-badges">
             <span class="binding-badge ${escapeHtml(bindingLevel)}">${escapeHtml(bindingLevel)}</span>
-            ${statusPill("Official source", "green")}
+            ${standard?.jurisdiction ? `<span class="binding-badge ${stateSource ? "state-plan" : "regulation"}">${escapeHtml(standard.jurisdiction)}</span>` : ""}
+            ${statusPill(stateSource ? "Official link verified" : "Official source", stateSource ? "blue" : "green")}
           </div>
 
           <section class="reference-section">
@@ -390,12 +557,20 @@
             <h3>Source fingerprint</h3>
             <dl>
               <div><dt>Authority</dt><dd>${escapeHtml(standard?.authority || regulatory.meta.authority)}</dd></div>
-              <div><dt>Current through</dt><dd>${escapeHtml(currentThrough || "Not recorded")}</dd></div>
-              <div><dt>Retrieved</dt><dd>${escapeHtml(regulatory.meta.generatedAt || "Not recorded")}</dd></div>
-              <div><dt>SHA-256</dt><dd><code>${escapeHtml(sourceHash || "Pending source snapshot")}</code></dd></div>
+              <div><dt>Jurisdiction</dt><dd>${escapeHtml(jurisdictionLabel(standard?.jurisdiction || "US-FED"))}</dd></div>
+              <div><dt>${stateSource ? "Official link checked" : "Current through"}</dt><dd>${escapeHtml(sourceDate || "Not recorded")}</dd></div>
+              <div><dt>Retrieved</dt><dd>${escapeHtml(stateSource ? "Pending server-side source ingestion" : (regulatory.meta.generatedAt || "Not recorded"))}</dd></div>
+              <div><dt>SHA-256</dt><dd><code>${escapeHtml(sourceHash || "Pending server-side source snapshot")}</code></dd></div>
             </dl>
             <a class="button small primary" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener noreferrer">Open official source</a>
           </section>
+
+          ${stateSource ? `
+            <div class="prototype-note">
+              <strong>State trace status</strong>
+              <span>The official state link and citation were verified on ${escapeHtml(sourceDate || "the recorded check date")}. Exact source bytes, paragraph extraction, SHA-256, and the federal adoption crosswalk remain in the human review queue; this record is not yet a compliance-ready legal determination.</span>
+            </div>
+          ` : ""}
 
           <section class="reference-section">
             <h3>Connected company controls</h3>
@@ -457,19 +632,108 @@
       .join(" ");
   }
 
+  function readableStatus(status) {
+    return String(status || "new")
+      .split("_")
+      .map((part) => `${part[0]?.toUpperCase() || ""}${part.slice(1)}`)
+      .join(" ");
+  }
+
+  function currentRawRole() {
+    return data.currentUser?.rawRole || "worker";
+  }
+
+  function canManageCompany() {
+    return ["corporate_admin", "safety_manager"].includes(currentRawRole());
+  }
+
+  function isReadOnlyAuditor() {
+    return currentRawRole() === "auditor";
+  }
+
+  function canWriteLocation(locationId = state.locationId) {
+    if (!data.locations.length) return false;
+    if (canManageCompany()) return true;
+    if (!["location_manager", "supervisor"].includes(currentRawRole())) return false;
+    if (locationId === "all") return data.locations.length > 0;
+    return data.locations.some((location) => location.id === locationId);
+  }
+
+  function hasAccessibleLocation(locationId = state.locationId) {
+    if (!data.locations.length) return false;
+    return locationId === "all"
+      || data.locations.some((location) => location.id === locationId);
+  }
+
+  function formatShortDate(value, fallback = "Not scheduled") {
+    if (!value) return fallback;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return fallback;
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric"
+    }).format(date);
+  }
+
+  function daysOpenSince(value) {
+    if (!value) return 0;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 0;
+    return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86_400_000));
+  }
+
+  function isoDateOffset(days = 0) {
+    const date = new Date();
+    date.setDate(date.getDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+
   function renderAuthScreen() {
     const message = state.authMessage
       ? `<div class="auth-message" role="status">${escapeHtml(state.authMessage)}</div>`
       : "";
     let content = "";
 
-    if (state.authStatus === "loading") {
+    if (state.authStatus === "configuration-required") {
+      content = `
+        <div class="auth-card-heading">
+          <span class="auth-step">Real workspace required</span>
+          <h2>Connect SafetyOps to Supabase</h2>
+          <p>This build contains no fictional company or employee records. Add the SafetyOps project URL and publishable key to activate secure sign-in and company setup.</p>
+        </div>
+        <div class="auth-boundary-note">
+          <strong>No tenant data in GitHub</strong>
+          <span>Companies, locations, accounts, forms, evidence, and operational records load only after Supabase Auth and Row Level Security authorize them.</span>
+        </div>
+        <div class="auth-readiness-list">
+          <span>${statusPill("Public shell ready", "green")} GitHub Pages assets</span>
+          <span>${statusPill("Schema ready", "blue")} Versioned SafetyOps migrations</span>
+          <span>${statusPill("Connection required", "amber")} SafetyOps Supabase URL and publishable key</span>
+        </div>
+      `;
+    } else if (state.authStatus === "loading") {
       content = `
         <div class="auth-loading" role="status">
           <span class="auth-spinner" aria-hidden="true"></span>
           <h2>Securing your workspace</h2>
           <p>Checking your Supabase session and company membership.</p>
         </div>
+      `;
+    } else if (state.authStatus === "workspace-error") {
+      content = `
+        <div class="auth-card-heading">
+          <span class="auth-step">Workspace unavailable</span>
+          <h2>Your session is still secure</h2>
+          <p>SafetyOps could not load the authorized company records. No cached tenant workspace is being shown.</p>
+        </div>
+        ${message}
+        <div class="auth-boundary-note">
+          <strong>Recovery options</strong>
+          <span>Retry after checking the Supabase migration and network status, or sign out cleanly. This read failure did not create or change company records.</span>
+        </div>
+        <button class="button primary auth-submit" type="button" data-action="retry-workspace">Retry workspace</button>
+        <button class="button auth-submit" type="button" data-action="auth-sign-out">Sign out</button>
       `;
     } else if (state.authStatus === "needs-company") {
       content = `
@@ -482,9 +746,18 @@
         <form id="company-onboarding-form" class="auth-form">
           <label for="onboarding-company-name">Company name</label>
           <input id="onboarding-company-name" name="company_name" autocomplete="organization" minlength="2" maxlength="160" required placeholder="Example Manufacturing">
+          <label for="onboarding-location-name">First location name</label>
+          <input id="onboarding-location-name" name="location_name" minlength="2" maxlength="160" required placeholder="Main facility">
+          <label for="onboarding-state">Location state</label>
+          <select id="onboarding-state" name="state_code" required>
+            <option value="">Select the controlling state program</option>
+            <option value="OR">Oregon · Oregon OSHA</option>
+            <option value="WA">Washington · DOSH</option>
+            <option value="CA">California · Cal/OSHA</option>
+          </select>
           <div class="auth-boundary-note">
-            <strong>Private by default</strong>
-            <span>Every company row and file is scoped by company membership and Supabase RLS. GitHub receives no tenant data.</span>
+            <strong>Private and location-aware</strong>
+            <span>Supabase isolates every company row and file. The state selection creates a draft jurisdiction profile that must be reviewed before SafetyOps treats any rule as a compliance conclusion. GitHub receives no tenant data.</span>
           </div>
           <button class="button primary auth-submit" type="submit" ${state.authBusy ? "disabled" : ""}>${state.authBusy ? "Creating company…" : "Create company"}</button>
           <button class="button auth-submit" type="button" data-action="auth-sign-out">Sign out</button>
@@ -543,16 +816,70 @@
   function resetTenantOperationalData() {
     [
       "tasks",
+      "inspectionTemplates",
       "inspections",
       "courses",
       "people",
       "incidents",
       "actions",
       "documents",
-      "activity"
+      "activity",
+      "programAssignments",
+      "programSubmissions"
     ].forEach((key) => {
       data[key] = [];
     });
+  }
+
+  function resetTenantProgramLibrary() {
+    programLibrary.meta = {
+      sourceName: "Company safety library",
+      sourceFolderId: null,
+      sourceUrl: null,
+      sourceCapturedOn: null,
+      privacy: "Tenant data loads after authentication",
+      ingestionMode: "Create a company or sign in to load its private programs, forms, and source files.",
+      counts: {
+        programs: 0,
+        digitalForms: 0,
+        folders: 0,
+        looseResources: 0
+      },
+      extraction: {
+        extracted: 0,
+        imageOnly: 0,
+        ocrRequired: 0
+      },
+      binaryIngestion: {
+        filesVerified: 0,
+        totalBytes: 0,
+        capturedOn: null,
+        storageTarget: "Private Supabase Storage"
+      }
+    };
+    programLibrary.programs = [];
+    programLibrary.forms = [];
+    programLibrary.folders = [];
+    programLibrary.looseResources = [];
+    programLibrary.extracts = {};
+  }
+
+  function purgeTenantWorkspace() {
+    data.company = null;
+    data.currentUser = null;
+    data.locations = [];
+    resetTenantOperationalData();
+    resetTenantProgramLibrary();
+    state.locationId = "all";
+    state.searchQuery = "";
+    state.programQuery = "";
+    state.modal = null;
+    state.referenceId = null;
+    state.programDrawerId = null;
+    state.originalPreviewId = null;
+    state.activeFormId = null;
+    state.selectedTemplateId = null;
+    state.localFormUploads = [];
   }
 
   async function loadAuthenticatedWorkspace(user) {
@@ -568,6 +895,7 @@
       if (membershipResult.error) throw membershipResult.error;
 
       if (!membershipResult.data) {
+        purgeTenantWorkspace();
         state.authUser = user;
         state.authStatus = "needs-company";
         state.authBusy = false;
@@ -576,7 +904,34 @@
       }
 
       const membership = membershipResult.data;
-      const [companyResult, locationsResult, profileResult] = await Promise.all([
+      const [
+        companyResult,
+        locationsResult,
+        profileResult,
+        regulatoryProfilesResult,
+        templatesResult,
+        inspectionsResult,
+        inspectionContextsResult,
+        coursesResult,
+        trainingAssignmentsResult,
+        incidentsResult,
+        actionsResult,
+        documentsResult,
+        documentAcknowledgementsResult,
+        membersResult,
+        certificationsResult,
+        auditResult,
+        programsResult,
+        programVersionsResult,
+        programApplicabilityResult,
+        programFormTemplatesResult,
+        programFormVersionsResult,
+        programFormFieldsResult,
+        programAssignmentsResult,
+        programSubmissionsResult,
+        programRegulatoryLinksResult,
+        programFormFilesResult
+      ] = await Promise.all([
         supabaseClient
           .from("companies")
           .select("id, name, slug, timezone")
@@ -587,16 +942,182 @@
           .select("id, name, code, address, timezone, active")
           .eq("company_id", membership.company_id)
           .eq("active", true)
-          .order("created_at", { ascending: true }),
+          .order("created_at", { ascending: true })
+          .limit(100),
         supabaseClient
           .from("profiles")
           .select("full_name")
           .eq("id", user.id)
-          .maybeSingle()
+          .maybeSingle(),
+        supabaseClient
+          .from("location_regulatory_profiles")
+          .select("id, location_id, version, state_code, status, effective_from, effective_to, reviewed_by, reviewed_at, updated_at, location_jurisdiction_assignments(coverage_status, valid_from, valid_to, reviewed_by, reviewed_at, jurisdiction:regulatory_jurisdictions(code, name))")
+          .eq("company_id", membership.company_id)
+          .order("version", { ascending: false })
+          .limit(500),
+        supabaseClient
+          .from("form_templates")
+          .select("id, name, category, current_version, active, created_at, updated_at, form_template_versions(id, version, published, schema_json)")
+          .eq("company_id", membership.company_id)
+          .eq("active", true)
+          .order("updated_at", { ascending: false })
+          .limit(500),
+        supabaseClient
+          .from("inspections")
+          .select("id, location_id, template_id, template_version_id, title, status, score, scheduled_for, submitted_at, created_at, responses, form_templates(name)")
+          .eq("company_id", membership.company_id)
+          .order("created_at", { ascending: false })
+          .limit(100),
+        supabaseClient
+          .from("inspection_regulatory_contexts")
+          .select("inspection_id, regulatory_profile_id, trace_status, template_schema_sha256, submission_payload_sha256, profile_sha256, mapping_count, evidence_count, excluded_count, unresolved_count, context_manifest, context_sha256, captured_at")
+          .eq("company_id", membership.company_id)
+          .order("captured_at", { ascending: false })
+          .limit(100),
+        supabaseClient
+          .from("training_courses")
+          .select("id, title, category, description, estimated_minutes, active, current_version, created_at, updated_at, training_course_versions(id, version, published)")
+          .eq("company_id", membership.company_id)
+          .eq("active", true)
+          .order("updated_at", { ascending: false })
+          .limit(500),
+        supabaseClient
+          .from("training_assignments")
+          .select("id, location_id, course_id, course_version, worker_profile_id, status, assigned_at, due_at, completed_at, quiz_score")
+          .eq("company_id", membership.company_id)
+          .order("assigned_at", { ascending: false })
+          .limit(250),
+        supabaseClient
+          .from("incidents")
+          .select("id, location_id, incident_number, title, incident_type, potential_severity, status, occurred_at, reported_by, created_at")
+          .eq("company_id", membership.company_id)
+          .order("occurred_at", { ascending: false })
+          .limit(100),
+        supabaseClient
+          .from("corrective_actions")
+          .select("id, location_id, source_type, source_id, title, priority, status, assigned_to, due_at, created_at")
+          .eq("company_id", membership.company_id)
+          .order("created_at", { ascending: false })
+          .limit(150),
+        supabaseClient
+          .from("documents")
+          .select("id, title, document_type, owner_profile_id, current_version, acknowledgement_required, effective_at, review_at, active, updated_at, document_versions(id, version, published, checksum_sha256, published_at)")
+          .eq("company_id", membership.company_id)
+          .eq("active", true)
+          .order("updated_at", { ascending: false })
+          .limit(500),
+        supabaseClient
+          .from("document_acknowledgements")
+          .select("id, document_id, document_version_id, user_id, acknowledged_at, acknowledgement_record")
+          .eq("company_id", membership.company_id)
+          .eq("user_id", user.id)
+          .limit(1000),
+        supabaseClient
+          .from("company_memberships")
+          .select("user_id, role, active, profiles(full_name), location_memberships(location_id)")
+          .eq("company_id", membership.company_id)
+          .eq("active", true)
+          .order("created_at", { ascending: true })
+          .limit(500),
+        supabaseClient
+          .from("certifications")
+          .select("id, worker_profile_id, location_id, certification_type, expires_at, verification_status")
+          .eq("company_id", membership.company_id)
+          .limit(1000),
+        supabaseClient
+          .from("audit_events")
+          .select("id, location_id, actor_user_id, entity_type, action, details, occurred_at")
+          .eq("company_id", membership.company_id)
+          .order("occurred_at", { ascending: false })
+          .limit(30),
+        supabaseClient
+          .from("safety_programs")
+          .select("id, program_code, title, description, category, owner_profile_id, lifecycle_status, review_interval_months, created_at, updated_at")
+          .eq("company_id", membership.company_id)
+          .eq("lifecycle_status", "active")
+          .order("updated_at", { ascending: false })
+          .limit(500),
+        supabaseClient
+          .from("safety_program_versions")
+          .select("id, program_id, version, status, change_summary, effective_from, effective_to, next_review_at, source_manifest_sha256, content_manifest_sha256, published_at, created_at, updated_at")
+          .eq("company_id", membership.company_id)
+          .order("version", { ascending: false })
+          .limit(1000),
+        supabaseClient
+          .from("safety_program_location_applicability")
+          .select("id, program_version_id, location_id, regulatory_profile_id, applicability_status, rationale, conditions, local_addenda, review_status, effective_from, effective_to, applicability_sha256, reviewed_at")
+          .eq("company_id", membership.company_id)
+          .limit(1000),
+        supabaseClient
+          .from("safety_program_form_templates")
+          .select("id, program_id, template_key, name, purpose, created_at")
+          .eq("company_id", membership.company_id)
+          .order("created_at", { ascending: true })
+          .limit(1000),
+        supabaseClient
+          .from("safety_program_form_template_versions")
+          .select("id, program_id, program_version_id, template_id, version, title, instructions_markdown, status, completion_policy, signature_policy, schema_sha256, origin_kind, source_manifest_sha256, published_at, created_at, updated_at")
+          .eq("company_id", membership.company_id)
+          .order("version", { ascending: false })
+          .limit(1000),
+        supabaseClient
+          .from("safety_program_form_fields")
+          .select("id, program_version_id, form_template_version_id, parent_field_id, field_key, field_type, label, help_text, placeholder, required, sort_order, options, default_value, validation_rules, display_logic, data_classification, field_sha256")
+          .eq("company_id", membership.company_id)
+          .order("sort_order", { ascending: true })
+          .limit(1000),
+        supabaseClient
+          .from("safety_program_assignments")
+          .select("id, program_version_id, location_id, assignee_user_id, assignment_type, form_template_version_id, training_course_version_id, title, instructions, status, assigned_at, due_at, started_at, completed_at, assigned_by")
+          .eq("company_id", membership.company_id)
+          .order("assigned_at", { ascending: false })
+          .limit(250),
+        supabaseClient
+          .from("safety_program_form_submissions")
+          .select("id, program_version_id, location_id, form_template_version_id, assignment_id, submitted_by, status, client_submission_key, form_schema_sha256, submitted_payload_sha256, submission_context, started_at, submitted_at, reviewed_at, created_at, updated_at")
+          .eq("company_id", membership.company_id)
+          .order("created_at", { ascending: false })
+          .limit(250),
+        supabaseClient
+          .from("safety_program_regulatory_links")
+          .select("id, program_version_id, target_kind, form_template_version_id, form_field_id, location_id, jurisdiction_id, requirement_version_id, regulatory_unit_version_id, relationship, coverage_kind, source_locator, exact_excerpt_sha256, rationale, trace_sha256, reviewed_at, jurisdiction:regulatory_jurisdictions(code, name), requirement:compliance_requirement_versions(id, version, status, compliance_requirements(requirement_code, title)), regulatory_unit:regulatory_unit_versions(id, canonical_citation, legal_status, content_sha256, source_locator)")
+          .eq("company_id", membership.company_id)
+          .limit(1000),
+        supabaseClient
+          .from("safety_program_form_template_files")
+          .select("id, program_version_id, form_template_version_id, file_role, is_primary, source_locator, created_at")
+          .eq("company_id", membership.company_id)
+          .limit(1000)
       ]);
-      if (companyResult.error) throw companyResult.error;
-      if (locationsResult.error) throw locationsResult.error;
-      if (profileResult.error) throw profileResult.error;
+      const failedResult = [
+        companyResult,
+        locationsResult,
+        profileResult,
+        regulatoryProfilesResult,
+        templatesResult,
+        inspectionsResult,
+        inspectionContextsResult,
+        coursesResult,
+        trainingAssignmentsResult,
+        incidentsResult,
+        actionsResult,
+        documentsResult,
+        documentAcknowledgementsResult,
+        membersResult,
+        certificationsResult,
+        auditResult,
+        programsResult,
+        programVersionsResult,
+        programApplicabilityResult,
+        programFormTemplatesResult,
+        programFormVersionsResult,
+        programFormFieldsResult,
+        programAssignmentsResult,
+        programSubmissionsResult,
+        programRegulatoryLinksResult,
+        programFormFilesResult
+      ].find((result) => result?.error);
+      if (failedResult) throw failedResult.error;
 
       const fullName = profileResult.data?.full_name?.trim()
         || user.user_metadata?.full_name
@@ -609,35 +1130,684 @@
         .map((part) => part[0].toUpperCase())
         .join("") || "SO";
 
+      resetTenantOperationalData();
+      const rawMembers = membersResult.data || [];
+      const rawRole = membership.role || "worker";
+      const visibleMembers = ["corporate_admin", "safety_manager"].includes(rawRole)
+        ? rawMembers
+        : ["location_manager", "supervisor"].includes(rawRole)
+          ? rawMembers.filter((member) => (
+            member.user_id === user.id
+            || (member.location_memberships || []).length > 0
+          ))
+          : rawMembers.filter((member) => member.user_id === user.id);
+      const rawAssignments = trainingAssignmentsResult.data || [];
+      const rawCertifications = certificationsResult.data || [];
+      const rawPrograms = programsResult.data || [];
+      const rawProgramVersions = programVersionsResult.data || [];
+      const rawProgramApplicability = programApplicabilityResult.data || [];
+      const rawProgramFormTemplates = programFormTemplatesResult.data || [];
+      const rawProgramFormVersions = programFormVersionsResult.data || [];
+      const rawProgramFormFields = programFormFieldsResult.data || [];
+      const rawProgramAssignments = programAssignmentsResult.data || [];
+      const rawProgramSubmissions = programSubmissionsResult.data || [];
+      const rawProgramRegulatoryLinks = programRegulatoryLinksResult.data || [];
+      const rawProgramFormFiles = programFormFilesResult.data || [];
+      const memberNameById = new Map(rawMembers.map((member) => [
+        member.user_id,
+        member.profiles?.full_name?.trim() || "Team member"
+      ]));
+      memberNameById.set(user.id, fullName);
+
       data.company = {
         id: companyResult.data.id,
         name: companyResult.data.name,
         slug: companyResult.data.slug,
         timezone: companyResult.data.timezone,
         plan: "Private Supabase workspace",
-        activeWorkers: 0,
-        daysWithoutRecordable: 0
+        activeWorkers: rawMembers.length,
+        daysWithoutRecordable: null
       };
       data.currentUser = {
+        id: user.id,
         name: fullName,
         initials,
-        role: readableRole(membership.role)
+        role: readableRole(rawRole),
+        rawRole
       };
-      data.locations = (locationsResult.data || []).map((location, index) => ({
-        id: location.id,
-        name: location.name,
-        short: location.code,
-        city: location.address || "Address not set",
-        type: index === 0 ? "Primary location" : "Company location",
-        manager: fullName,
-        people: 0,
-        training: 0,
-        inspections: 0,
-        openActions: 0,
-        risk: "New",
-        accent: ["#24a37a", "#3c8ce7", "#e0a12b", "#8b6bd6", "#df655d"][index % 5]
+
+      data.people = visibleMembers.map((member) => {
+        const name = memberNameById.get(member.user_id);
+        const workerAssignments = rawAssignments.filter((assignment) =>
+          assignment.worker_profile_id === member.user_id
+        );
+        const completeAssignments = workerAssignments.filter((assignment) =>
+          ["complete", "completed"].includes(assignment.status)
+        ).length;
+        const workerCertifications = rawCertifications.filter((certification) =>
+          certification.worker_profile_id === member.user_id
+        );
+        const now = Date.now();
+        const hasExpired = workerCertifications.some((certification) =>
+          certification.verification_status === "expired" ||
+          (certification.expires_at && new Date(certification.expires_at).getTime() < now)
+        );
+        const hasDueSoon = workerCertifications.some((certification) => {
+          if (!certification.expires_at) return false;
+          const remaining = new Date(certification.expires_at).getTime() - now;
+          return remaining >= 0 && remaining <= 30 * 86_400_000;
+        });
+        const hasTrainingDue = workerAssignments.some((assignment) =>
+          !["complete", "completed", "waived"].includes(assignment.status)
+        );
+        const locationIds = [...new Set(
+          (member.location_memberships || []).map((item) => item.location_id).filter(Boolean)
+        )];
+        const primaryLocationId = locationIds[0] || null;
+        return {
+          id: member.user_id,
+          name,
+          initials: name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("") || "SO",
+          role: readableRole(member.role),
+          locationId: primaryLocationId,
+          locationIds,
+          training: workerAssignments.length
+            ? Math.round((completeAssignments / workerAssignments.length) * 100)
+            : 0,
+          credentials: `${workerCertifications.length} record${workerCertifications.length === 1 ? "" : "s"}`,
+          status: hasExpired ? "Expired" : hasDueSoon ? "Due soon" : hasTrainingDue ? "Training due" : "Current"
+        };
+      });
+
+      data.inspectionTemplates = (templatesResult.data || []).map((template) => {
+        const currentVersion = template.form_template_versions?.find((version) =>
+          version.version === template.current_version
+        );
+        const schema = currentVersion?.schema_json || {};
+        const schemaQuestions = Array.isArray(schema.questions)
+          ? schema.questions
+          : Array.isArray(schema.fields)
+            ? schema.fields
+            : [];
+        const templateInspections = (inspectionsResult.data || []).filter((inspection) =>
+          inspection.template_id === template.id
+        );
+        const lastUsed = templateInspections[0]?.submitted_at || templateInspections[0]?.created_at;
+        return {
+          id: template.id,
+          name: template.name,
+          category: template.category,
+          questions: schemaQuestions.length,
+          questionDefinitions: schemaQuestions,
+          frequency: "As assigned",
+          used: templateInspections.length,
+          lastUsed: lastUsed ? formatShortDate(lastUsed) : "Not yet used",
+          currentVersion: template.current_version,
+          currentVersionId: currentVersion?.id || null,
+          published: Boolean(currentVersion?.published)
+        };
+      });
+
+      const inspectionContextById = new Map(
+        (inspectionContextsResult.data || []).map((context) => [context.inspection_id, context])
+      );
+      data.inspections = (inspectionsResult.data || []).map((inspection) => {
+        const responseValues = Object.values(inspection.responses?.answers || {});
+        const findings = responseValues.filter((response) =>
+          response === "fail" || response?.value === "fail"
+        ).length;
+        const regulatoryContext = inspectionContextById.get(inspection.id);
+        return {
+          id: inspection.id,
+          template: inspection.form_templates?.name || inspection.title,
+          templateVersionId: inspection.template_version_id,
+          locationId: inspection.location_id,
+          assignee: inspection.submitted_at ? "Signed submission" : "Draft owner",
+          score: inspection.score === null ? null : Number(inspection.score),
+          status: readableStatus(inspection.status),
+          due: formatShortDate(inspection.scheduled_for || inspection.submitted_at || inspection.created_at),
+          findings,
+          regulatorySnapshot: inspection.responses?.regulatorySnapshot || null,
+          regulatoryTraceStatus: regulatoryContext?.trace_status
+            ? readableStatus(regulatoryContext.trace_status)
+            : null,
+          regulatoryEvidenceCount: Number(regulatoryContext?.evidence_count || 0),
+          regulatoryUnresolvedCount: Number(regulatoryContext?.unresolved_count || 0),
+          regulatoryContextSha256: regulatoryContext?.context_sha256 || null
+        };
+      });
+
+      data.courses = (coursesResult.data || []).map((course) => {
+        const assignments = rawAssignments.filter((assignment) => assignment.course_id === course.id);
+        const complete = assignments.filter((assignment) =>
+          ["complete", "completed"].includes(assignment.status)
+        ).length;
+        const dueDates = assignments.map((assignment) => assignment.due_at).filter(Boolean).sort();
+        const currentVersion = course.training_course_versions?.find((version) =>
+          version.version === course.current_version
+        );
+        return {
+          id: course.id,
+          name: course.title,
+          category: course.category,
+          description: course.description,
+          duration: `${course.estimated_minutes} min`,
+          format: "Supabase course",
+          assigned: assignments.length,
+          complete: assignments.length ? Math.round((complete / assignments.length) * 100) : 0,
+          due: dueDates.length ? formatShortDate(dueDates[0]) : "Not assigned",
+          currentVersion: course.current_version,
+          currentVersionId: currentVersion?.id || null,
+          published: Boolean(currentVersion?.published)
+        };
+      });
+
+      data.incidents = (incidentsResult.data || []).map((incident) => ({
+        id: `INC-${incident.incident_number}`,
+        databaseId: incident.id,
+        title: incident.title,
+        type: incident.incident_type,
+        severity: readableStatus(incident.potential_severity),
+        locationId: incident.location_id,
+        reportedBy: memberNameById.get(incident.reported_by) || "Authorized reporter",
+        date: formatShortDate(incident.occurred_at),
+        status: readableStatus(incident.status),
+        daysOpen: daysOpenSince(incident.created_at)
       }));
-      resetTenantOperationalData();
+
+      data.actions = (actionsResult.data || []).map((action) => ({
+        id: action.id,
+        title: action.title,
+        source: readableStatus(action.source_type),
+        owner: memberNameById.get(action.assigned_to) || "Unassigned",
+        locationId: action.location_id,
+        due: formatShortDate(action.due_at),
+        priority: readableStatus(action.priority),
+        status: readableStatus(action.status)
+      }));
+
+      data.documents = (documentsResult.data || []).map((documentRecord) => {
+        const currentVersion = documentRecord.document_versions?.find((version) =>
+          version.version === documentRecord.current_version
+        );
+        const acknowledgement = (documentAcknowledgementsResult.data || []).find((record) =>
+          record.document_id === documentRecord.id
+          && record.document_version_id === currentVersion?.id
+          && record.user_id === user.id
+        );
+        return {
+          id: documentRecord.id,
+          name: documentRecord.title,
+          type: documentRecord.document_type,
+          version: `v${documentRecord.current_version}`,
+          versionNumber: documentRecord.current_version,
+          currentVersionId: currentVersion?.id || null,
+          versionPublished: Boolean(currentVersion?.published),
+          versionChecksumSha256: currentVersion?.checksum_sha256 || null,
+          owner: memberNameById.get(documentRecord.owner_profile_id) || "Unassigned",
+          updated: formatShortDate(documentRecord.updated_at),
+          review: formatShortDate(documentRecord.review_at),
+          acknowledgement: documentRecord.acknowledgement_required && currentVersion
+            ? acknowledgement ? 100 : 0
+            : null,
+          acknowledgedAt: acknowledgement?.acknowledged_at || null,
+          acknowledgementRequired: documentRecord.acknowledgement_required,
+          status: documentRecord.review_at && new Date(documentRecord.review_at).getTime() < Date.now()
+            ? "Review due"
+            : documentRecord.acknowledgement_required && !acknowledgement
+              ? "Acknowledgement due"
+              : acknowledgement
+                ? "Acknowledged"
+                : "Current"
+        };
+      });
+
+      const operationalDate = new Date().toISOString().slice(0, 10);
+      const programVersionIsEffective = (version) => Boolean(
+        version
+        && (!version.effective_from || version.effective_from <= operationalDate)
+        && (!version.effective_to || version.effective_to >= operationalDate)
+      );
+      const programVersionRank = (version) => {
+        if (!version) return -1;
+        if (version.status === "published" && programVersionIsEffective(version)) return 4;
+        if (version.status === "approved" && programVersionIsEffective(version)) return 3;
+        if (version.status === "in_review") return 2;
+        if (version.status === "draft") return 1;
+        return 0;
+      };
+      const currentProgramVersionByProgramId = new Map();
+      rawProgramVersions.forEach((version) => {
+        const current = currentProgramVersionByProgramId.get(version.program_id);
+        const versionRank = programVersionRank(version);
+        const currentRank = programVersionRank(current);
+        if (!current || versionRank > currentRank || (
+          versionRank === currentRank && Number(version.version) > Number(current.version)
+        )) {
+          currentProgramVersionByProgramId.set(version.program_id, version);
+        }
+      });
+
+      const regulatoryCitationsFor = (programVersionId, formTemplateVersionId = null) => (
+        rawProgramRegulatoryLinks
+          .filter((link) => (
+            link.program_version_id === programVersionId
+            && (!formTemplateVersionId || (
+              link.target_kind === "program_version"
+              || link.form_template_version_id === formTemplateVersionId
+            ))
+          ))
+          .map((link) => (
+            link.regulatory_unit?.canonical_citation
+            || link.requirement?.compliance_requirements?.requirement_code
+            || link.source_locator?.citation
+            || link.source_locator?.identifier
+            || link.source_locator?.officialUrl
+            || link.source_locator?.official_url
+            || null
+          ))
+          .filter(Boolean)
+          .filter((value, index, rows) => rows.indexOf(value) === index)
+      );
+
+      const regulatoryTraceFor = (programVersionId, formTemplateVersionId = null) => (
+        rawProgramRegulatoryLinks
+          .filter((link) => (
+            link.program_version_id === programVersionId
+            && (!formTemplateVersionId || (
+              link.target_kind === "program_version"
+              || link.form_template_version_id === formTemplateVersionId
+            ))
+          ))
+          .map((link) => ({
+            id: link.id,
+            jurisdiction: link.jurisdiction?.code || null,
+            citation: link.regulatory_unit?.canonical_citation
+              || link.requirement?.compliance_requirements?.requirement_code
+              || link.source_locator?.citation
+              || null,
+            regulatoryUnitVersionId: link.regulatory_unit_version_id,
+            requirementVersionId: link.requirement_version_id,
+            regulatoryContentSha256: link.regulatory_unit?.content_sha256 || null,
+            exactExcerptSha256: link.exact_excerpt_sha256,
+            traceSha256: link.trace_sha256,
+            relationship: link.relationship,
+            coverageKind: link.coverage_kind,
+            reviewedAt: link.reviewed_at
+          }))
+      );
+
+      const applicableLocationsFor = (programVersionId) => {
+        const programVersion = rawProgramVersions.find((version) => version.id === programVersionId);
+        if (
+          programVersion?.status !== "published"
+          || !programVersionIsEffective(programVersion)
+        ) return [];
+        return rawProgramApplicability.filter((row) => (
+          row.program_version_id === programVersionId
+          && row.review_status === "reviewed"
+          && ["applies", "conditional"].includes(row.applicability_status)
+          && (!row.effective_from || row.effective_from <= operationalDate)
+          && (!row.effective_to || row.effective_to >= operationalDate)
+        ))
+        .map((row) => row.location_id);
+      };
+
+      programLibrary.programs = rawPrograms.map((program) => {
+        const version = currentProgramVersionByProgramId.get(program.id);
+        const relatedForms = rawProgramFormTemplates
+          .filter((template) => template.program_id === program.id)
+          .map((template) => template.id);
+        return {
+          id: program.id,
+          number: program.program_code,
+          title: program.title,
+          sourceName: `SafetyOps controlled program ${program.program_code}`,
+          description: program.description || "",
+          category: program.category,
+          language: "English",
+          type: "Program",
+          version: version ? `v${version.version}` : "No version",
+          mappingStatus: version ? readableStatus(version.status) : "Version required",
+          privacy: "Private tenant record",
+          sourceId: version?.id || program.id,
+          sourceCapturedOn: version?.published_at || version?.updated_at || program.updated_at,
+          sourceSystem: "Supabase controlled records",
+          topics: [],
+          citations: version ? regulatoryCitationsFor(version.id) : [],
+          regulatoryTrace: version ? regulatoryTraceFor(version.id) : [],
+          locations: version ? applicableLocationsFor(version.id) : [],
+          relatedForms,
+          programVersionId: version?.id || null,
+          programStatus: version?.status || null,
+          sourceManifestSha256: version?.source_manifest_sha256 || null,
+          contentManifestSha256: version?.content_manifest_sha256 || null,
+          nextReviewAt: version?.next_review_at || null
+        };
+      });
+
+      const currentFormVersionByTemplateId = new Map();
+      rawProgramFormVersions.forEach((version) => {
+        const current = currentFormVersionByTemplateId.get(version.template_id);
+        const selectedProgramVersionId = currentProgramVersionByProgramId.get(version.program_id)?.id;
+        const versionRank = (version.program_version_id === selectedProgramVersionId ? 2 : 0)
+          + (version.status === "published" ? 1 : 0);
+        const currentRank = current
+          ? (current.program_version_id === selectedProgramVersionId ? 2 : 0)
+            + (current.status === "published" ? 1 : 0)
+          : -1;
+        if (!current || versionRank > currentRank || (
+          versionRank === currentRank && Number(version.version) > Number(current.version)
+        )) {
+          currentFormVersionByTemplateId.set(version.template_id, version);
+        }
+      });
+
+      const fieldTypeForRunner = (fieldType) => ({
+        instruction: "instruction",
+        short_text: "text",
+        long_text: "textarea",
+        number: "number",
+        date: "date",
+        time: "time",
+        datetime: "datetime-local",
+        boolean: "yesno",
+        single_choice: "select",
+        multi_choice: "multiselect",
+        employee: "employee",
+        location: "location",
+        file: "file",
+        signature: "signature",
+        acknowledgement: "acknowledgement"
+      })[fieldType] || "text";
+
+      programLibrary.forms = rawProgramFormTemplates
+        .map((template) => {
+          const version = currentFormVersionByTemplateId.get(template.id);
+          if (!version) return null;
+          const program = rawPrograms.find((item) => item.id === template.program_id);
+          const formFields = rawProgramFormFields
+            .filter((field) => field.form_template_version_id === version.id)
+            .sort((left, right) => Number(left.sort_order) - Number(right.sort_order))
+            .map((field) => ({
+              id: field.field_key,
+              databaseId: field.id,
+              type: fieldTypeForRunner(field.field_type),
+              databaseType: field.field_type,
+              label: field.label,
+              helpText: field.help_text,
+              placeholder: field.placeholder,
+              required: field.required,
+              options: field.options || [],
+              dataClassification: field.data_classification,
+              fieldSha256: field.field_sha256
+            }));
+          const primaryFile = rawProgramFormFiles.find((file) => (
+            file.form_template_version_id === version.id
+            && file.file_role === "original"
+            && file.is_primary
+          ));
+          return {
+            id: template.id,
+            title: version.title || template.name,
+            sourceName: program?.title || "Company safety program",
+            description: template.purpose || version.instructions_markdown || "",
+            category: program?.category || "Company form",
+            language: "English",
+            type: "Form",
+            version: `v${version.version}`,
+            mappingStatus: version.status === "published"
+              ? "Published and schema-pinned"
+              : "Draft — not available for submission",
+            privacy: "Private tenant record",
+            sourceId: version.id,
+            sourceCapturedOn: version.published_at || version.updated_at || version.created_at,
+            sourceSystem: "Supabase controlled records",
+            topics: [],
+            citations: regulatoryCitationsFor(version.program_version_id, version.id),
+            regulatoryTrace: regulatoryTraceFor(version.program_version_id, version.id),
+            locations: applicableLocationsFor(version.program_version_id),
+            fields: formFields,
+            programId: template.program_id,
+            programVersionId: version.program_version_id,
+            formTemplateVersionId: version.id,
+            schemaSha256: version.schema_sha256,
+            status: version.status,
+            completionPolicy: version.completion_policy || {},
+            signaturePolicy: version.signature_policy || {},
+            sourceManifestSha256: version.source_manifest_sha256 || null,
+            originalFile: primaryFile ? {
+              id: primaryFile.id,
+              filename: "Authorized original",
+              access: "Short-lived signed download required",
+              sourceLocator: primaryFile.source_locator || {}
+            } : null
+          };
+        })
+        .filter(Boolean);
+
+      programLibrary.meta = {
+        sourceName: `${companyResult.data.name} safety library`,
+        sourceFolderId: null,
+        sourceUrl: null,
+        sourceCapturedOn: null,
+        privacy: "Tenant records authorized by Supabase RLS",
+        ingestionMode: "Programs, versions, applicability, forms, assignments, and submissions load from the authenticated tenant.",
+        counts: {
+          programs: programLibrary.programs.length,
+          digitalForms: programLibrary.forms.length,
+          folders: 0,
+          looseResources: 0
+        },
+        extraction: {
+          extracted: rawProgramVersions.filter((version) => version.content_manifest_sha256).length,
+          imageOnly: 0,
+          ocrRequired: 0
+        },
+        binaryIngestion: {
+          filesVerified: rawProgramFormFiles.length,
+          totalBytes: 0,
+          capturedOn: null,
+          storageTarget: "Private Supabase Storage"
+        }
+      };
+      programLibrary.folders = [];
+      programLibrary.looseResources = [];
+      programLibrary.extracts = {};
+
+      data.programAssignments = rawProgramAssignments.map((assignment) => ({
+        id: assignment.id,
+        programVersionId: assignment.program_version_id,
+        formTemplateVersionId: assignment.form_template_version_id,
+        locationId: assignment.location_id,
+        assigneeUserId: assignment.assignee_user_id,
+        assignee: memberNameById.get(assignment.assignee_user_id) || "Authorized worker",
+        assignedBy: memberNameById.get(assignment.assigned_by) || "Authorized manager",
+        assignmentType: assignment.assignment_type,
+        title: assignment.title,
+        instructions: assignment.instructions,
+        status: readableStatus(assignment.status),
+        due: formatShortDate(assignment.due_at),
+        assignedAt: assignment.assigned_at,
+        completedAt: assignment.completed_at
+      }));
+      data.programSubmissions = rawProgramSubmissions.map((submission) => ({
+        id: submission.id,
+        programVersionId: submission.program_version_id,
+        formTemplateVersionId: submission.form_template_version_id,
+        assignmentId: submission.assignment_id,
+        locationId: submission.location_id,
+        submittedBy: memberNameById.get(submission.submitted_by) || "Authorized user",
+        submittedByUserId: submission.submitted_by,
+        status: readableStatus(submission.status),
+        schemaSha256: submission.form_schema_sha256,
+        payloadSha256: submission.submitted_payload_sha256,
+        regulatoryContext: submission.submission_context || null,
+        startedAt: submission.started_at,
+        submittedAt: submission.submitted_at,
+        reviewedAt: submission.reviewed_at
+      }));
+
+      data.tasks = [
+        ...data.actions
+          .filter((action) => action.status !== "Closed")
+          .map((action) => ({
+            id: `task-action-${action.id}`,
+            type: "Corrective action",
+            title: action.title,
+            locationId: action.locationId,
+            owner: action.owner,
+            due: action.due,
+            priority: action.priority,
+            progress: 0,
+            status: action.status
+          })),
+        ...rawAssignments
+          .filter((assignment) => !["complete", "completed", "waived"].includes(assignment.status))
+          .map((assignment) => ({
+            id: `task-training-${assignment.id}`,
+            type: "Training",
+            title: data.courses.find((course) => course.id === assignment.course_id)?.name || "Training assignment",
+            locationId: assignment.location_id,
+            owner: memberNameById.get(assignment.worker_profile_id) || "Assigned worker",
+            due: formatShortDate(assignment.due_at),
+            priority: "Medium",
+            progress: assignment.status === "in_progress" ? 50 : 0,
+            status: readableStatus(assignment.status)
+          })),
+        ...data.programAssignments
+          .filter((assignment) => (
+            assignment.assigneeUserId === user.id
+            && !["Completed", "Waived", "Cancelled"].includes(assignment.status)
+          ))
+          .map((assignment) => ({
+            id: `task-program-${assignment.id}`,
+            type: assignment.assignmentType === "complete_form"
+              ? "Company form"
+              : "Safety program",
+            title: assignment.title,
+            locationId: assignment.locationId,
+            owner: assignment.assignee,
+            due: assignment.due,
+            priority: "Medium",
+            progress: assignment.status === "In Progress" ? 50 : 0,
+            status: assignment.status
+          }))
+      ];
+
+      data.activity = (auditResult.data || []).map((event) => ({
+        id: event.id,
+        icon: event.action.includes("created") ? "+" : "•",
+        tone: event.action.includes("closed") ? "green" : "blue",
+        text: `${memberNameById.get(event.actor_user_id) || "Authorized user"} ${readableStatus(event.action).toLowerCase()} ${readableStatus(event.entity_type).toLowerCase()}.`,
+        time: formatShortDate(event.occurred_at)
+      }));
+
+      const profilesByLocation = new Map();
+      (regulatoryProfilesResult.data || []).forEach((profile) => {
+        if (!profilesByLocation.has(profile.location_id)) profilesByLocation.set(profile.location_id, []);
+        profilesByLocation.get(profile.location_id).push(profile);
+      });
+      data.locations = (locationsResult.data || []).map((location, index) => {
+        const today = new Date().toISOString().slice(0, 10);
+        const locationProfiles = profilesByLocation.get(location.id) || [];
+        const profileIsEffective = (profile) => (
+          (!profile.effective_from || profile.effective_from <= today)
+          && (!profile.effective_to || profile.effective_to >= today)
+        );
+        const approvedProfile = locationProfiles.find((profile) => (
+          profile.status === "approved"
+          && profile.reviewed_by
+          && profile.reviewed_at
+          && profileIsEffective(profile)
+        ));
+        const regulatoryProfile = approvedProfile || locationProfiles[0];
+        const expectedJurisdiction = regulatoryProfile?.state_code
+          ? `US-${regulatoryProfile.state_code}`
+          : "US-FED";
+        const assignmentRank = (item) => {
+          const reviewedAndEffective = Boolean(
+            item?.reviewed_by
+            && item?.reviewed_at
+            && (!item.valid_from || item.valid_from <= today)
+            && (!item.valid_to || item.valid_to >= today)
+          );
+          const coverageRank = {
+            applies: 4,
+            partial: 3,
+            requires_review: 2,
+            does_not_apply: 0
+          }[item?.coverage_status] || 0;
+          return (item?.jurisdiction?.code === expectedJurisdiction ? 10 : 0)
+            + (reviewedAndEffective ? 5 : 0)
+            + coverageRank;
+        };
+        const assignment = [...(regulatoryProfile?.location_jurisdiction_assignments || [])]
+          .filter((item) => item.coverage_status !== "does_not_apply")
+          .sort((left, right) => assignmentRank(right) - assignmentRank(left))[0]
+          || regulatoryProfile?.location_jurisdiction_assignments?.[0];
+        const assignmentReviewedAndEffective = Boolean(
+          assignment?.reviewed_by
+          && assignment?.reviewed_at
+          && (!assignment.valid_from || assignment.valid_from <= today)
+          && (!assignment.valid_to || assignment.valid_to >= today)
+        );
+        const profileApproved = Boolean(
+          approvedProfile
+          && assignmentReviewedAndEffective
+          && ["applies", "partial"].includes(assignment?.coverage_status)
+        );
+        const locationMembers = data.people.filter((person) =>
+          person.locationIds?.includes(location.id)
+        );
+        const locationAssignments = rawAssignments.filter((item) => item.location_id === location.id);
+        const locationTrainingComplete = locationAssignments.filter((item) =>
+          ["complete", "completed"].includes(item.status)
+        ).length;
+        const locationInspections = data.inspections.filter((item) => item.locationId === location.id);
+        const completedInspections = locationInspections.filter((item) =>
+          ["Submitted", "Complete", "Closed"].includes(item.status)
+        ).length;
+        const openActions = data.actions.filter((item) =>
+          item.locationId === location.id && item.status !== "Closed"
+        );
+        return {
+          id: location.id,
+          name: location.name,
+          short: location.code,
+          city: location.address || "Address not set",
+          type: index === 0 ? "Primary location" : "Company location",
+          manager: "Unassigned",
+          people: locationMembers.length,
+          training: locationAssignments.length
+            ? Math.round((locationTrainingComplete / locationAssignments.length) * 100)
+            : 0,
+          inspections: locationInspections.length
+            ? Math.round((completedInspections / locationInspections.length) * 100)
+            : 0,
+          openActions: openActions.length,
+          hasTrainingData: locationAssignments.length > 0,
+          hasInspectionData: locationInspections.length > 0,
+          hasActionData: data.actions.some((item) => item.locationId === location.id),
+          risk: openActions.some((item) => item.priority === "Critical")
+            ? "Elevated"
+            : openActions.length
+              ? "Watch"
+              : "New",
+          stateCode: regulatoryProfile?.state_code || null,
+          jurisdiction: assignment?.jurisdiction?.code
+            || (regulatoryProfile?.state_code ? `US-${regulatoryProfile.state_code}` : "US-FED"),
+          regulatoryProfileId: regulatoryProfile?.id || null,
+          regulatoryProfileStatus: profileApproved ? "approved" : "review_required",
+          regulatoryCoverageStatus: assignment?.coverage_status || "requires_review",
+          regulatoryReviewPending: Boolean(
+            approvedProfile
+            && locationProfiles[0]
+            && Number(locationProfiles[0].version) > Number(approvedProfile.version)
+          ),
+          accent: ["#24a37a", "#3c8ce7", "#e0a12b", "#8b6bd6", "#df655d"][index % 5]
+        };
+      });
       state.localFormUploads = [];
       state.locationId = membership.default_location_id
         && data.locations.some((location) => location.id === membership.default_location_id)
@@ -648,13 +1818,16 @@
       state.authMessage = "";
       state.authBusy = false;
       try {
+        if (!localUploadStagingEnabled) return render();
         state.localFormUploads = await listLocalFormUploads();
       } catch (_error) {
         state.localFormUploads = [];
       }
       render();
     } catch (error) {
-      state.authStatus = "signed-out";
+      purgeTenantWorkspace();
+      state.authUser = user;
+      state.authStatus = "workspace-error";
       state.authMessage = error?.message || "The private workspace could not be loaded.";
       state.authBusy = false;
       render();
@@ -663,6 +1836,16 @@
 
   async function applyAuthSession(session) {
     if (!session?.user) {
+      const previousCompanyId = data.company?.id;
+      const previousUserId = state.authUser?.id;
+      if (previousCompanyId && previousUserId) {
+        try {
+          await clearLocalFormUploads(previousCompanyId, previousUserId);
+        } catch (_error) {
+          // Local staging is best-effort and never the system of record.
+        }
+      }
+      purgeTenantWorkspace();
       state.authUser = null;
       state.localFormUploads = [];
       state.authStatus = "signed-out";
@@ -733,7 +1916,10 @@
   }
 
   async function handleCompanyOnboarding(form) {
-    const companyName = String(new FormData(form).get("company_name") || "").trim();
+    const formData = new FormData(form);
+    const companyName = String(formData.get("company_name") || "").trim();
+    const firstLocationName = String(formData.get("location_name") || "").trim();
+    const firstStateCode = String(formData.get("state_code") || "").trim().toUpperCase();
     const slugBase = companyName
       .toLowerCase()
       .normalize("NFKD")
@@ -749,7 +1935,9 @@
     try {
       const result = await supabaseClient.rpc("create_company_with_owner", {
         company_name: companyName,
-        company_slug: `${slugBase}-${suffix}`
+        company_slug: `${slugBase}-${suffix}`,
+        first_location_name: firstLocationName,
+        first_state_code: firstStateCode
       });
       if (result.error) throw result.error;
       await loadAuthenticatedWorkspace(state.authUser);
@@ -758,6 +1946,49 @@
       state.authMessage = error?.message || "The company workspace could not be created.";
       state.authBusy = false;
       render();
+    }
+  }
+
+  async function handleLocationCreate(form) {
+    if (!canManageCompany()) {
+      showToast("Location was not created", "Only corporate administrators and safety managers can create locations.");
+      return;
+    }
+    const formData = new FormData(form);
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Creating…";
+    }
+    try {
+      const result = await supabaseClient.rpc("create_company_location", {
+        target_company_id: data.company.id,
+        location_name: String(formData.get("name") || "").trim(),
+        location_code: String(formData.get("code") || "").trim(),
+        state_code: String(formData.get("state_code") || "").trim().toUpperCase(),
+        location_address: String(formData.get("address") || "").trim() || null,
+        location_timezone: String(formData.get("timezone") || "America/Los_Angeles")
+      });
+      if (result.error) throw result.error;
+      const newLocationId = result.data;
+      state.modal = null;
+      await loadAuthenticatedWorkspace(state.authUser);
+      if (data.locations.some((location) => location.id === newLocationId)) {
+        state.locationId = newLocationId;
+        localStorage.setItem(`${uiStoragePrefix}location`, state.locationId);
+      }
+      state.view = "locations";
+      render();
+      showToast(
+        "Location created",
+        "The location is active. Its state-plan assignment remains review-required until an authorized applicability review is completed."
+      );
+    } catch (error) {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Create location";
+      }
+      showToast("Location was not created", error?.message || "Supabase rejected the location.");
     }
   }
 
@@ -776,6 +2007,12 @@
   }
 
   function navItem(item) {
+    const liveCount = {
+      "my-work": data.tasks.length,
+      training: data.tasks.filter((task) => task.type === "Training").length,
+      incidents: data.incidents.filter((incident) => incident.status !== "Closed").length,
+      actions: data.actions.filter((action) => action.status !== "Closed").length
+    }[item.id] || 0;
     return `
       <button
         class="nav-button ${state.view === item.id ? "active" : ""}"
@@ -786,7 +2023,7 @@
       >
         <span class="nav-icon" aria-hidden="true">${item.icon}</span>
         <span class="nav-text">${escapeHtml(item.label)}</span>
-        ${item.count ? `<span class="nav-count ${item.danger ? "danger" : ""}">${item.count}</span>` : ""}
+        ${liveCount ? `<span class="nav-count ${item.danger ? "danger" : ""}">${liveCount}</span>` : ""}
       </button>
     `;
   }
@@ -856,9 +2093,9 @@
           </select>
         </label>
         <div class="topbar-actions">
-          <div class="connection-banner ${supabaseClient ? "" : "demo"}" title="${supabaseClient ? "Supabase client configured" : "Using fictional prototype data"}">
+          <div class="connection-banner" title="Supabase client configured">
             <span class="status-dot" aria-hidden="true"></span>
-            <span>${supabaseClient ? "Supabase ready" : "Demo workspace"}</span>
+            <span>Supabase ready</span>
           </div>
           <button class="icon-button" type="button" data-action="navigate" data-view="settings" aria-label="Open settings">⚙</button>
         </div>
@@ -892,35 +2129,40 @@
   }
 
   function headingActions(view) {
+    const hasLocation = data.locations.length > 0;
+    const canReport = hasLocation && !isReadOnlyAuditor();
+    const hasStartableTemplate = data.inspectionTemplates.some((template) =>
+      template.published && template.currentVersionId && template.questions > 0
+    );
     if (view === "dashboard" || view === "my-work") {
       return `
-        <button class="button" type="button" data-action="open-modal" data-modal="incident">Report incident</button>
-        <button class="button primary" type="button" data-action="open-modal" data-modal="inspection">Start inspection</button>
+        <button class="button" type="button" ${canReport ? "" : "disabled"} data-action="open-modal" data-modal="incident">Report incident</button>
+        <button class="button primary" type="button" ${canReport && hasStartableTemplate ? "" : "disabled"} data-action="open-modal" data-modal="inspection">Start inspection</button>
       `;
     }
     if (view === "inspections") {
       return `
-        <button class="button" type="button" data-action="prototype-action" data-message="The template builder is planned for the next prototype iteration.">Create template</button>
-        <button class="button primary" type="button" data-action="open-modal" data-modal="inspection">Start inspection</button>
+        <button class="button" type="button" data-action="prototype-action" data-message="Template authoring requires the controlled publication service before it can be enabled.">Create template</button>
+        <button class="button primary" type="button" ${canReport && hasStartableTemplate ? "" : "disabled"} data-action="open-modal" data-modal="inspection">Start inspection</button>
       `;
     }
     if (view === "training") {
       return `
         <button class="button" type="button" data-action="prototype-action" data-message="Course authoring will support video, PDF, quiz, and practical verification blocks.">Create course</button>
-        <button class="button primary" type="button" data-action="open-modal" data-modal="training">Assign training</button>
+        <button class="button primary" type="button" ${canWriteLocation() && data.courses.some((course) => course.published && course.currentVersionId) ? "" : "disabled"} data-action="open-modal" data-modal="training">Assign training</button>
       `;
     }
     if (view === "incidents") {
-      return `<button class="button primary" type="button" data-action="open-modal" data-modal="incident">Report incident</button>`;
+      return `<button class="button primary" type="button" ${canReport ? "" : "disabled"} data-action="open-modal" data-modal="incident">Report incident</button>`;
     }
     if (view === "actions") {
-      return `<button class="button primary" type="button" data-action="open-modal" data-modal="action">New action</button>`;
+      return `<button class="button primary" type="button" ${canWriteLocation() ? "" : "disabled"} data-action="open-modal" data-modal="action">New action</button>`;
     }
     if (view === "programs") {
       return `
         ${programLibrary.meta.sourceUrl ? `<a class="button" href="${escapeHtml(programLibrary.meta.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open private source</a>` : ""}
         <button class="button" type="button" data-action="program-import-status">Review ingestion status</button>
-        <button class="button primary" type="button" data-action="open-modal" data-modal="form-upload">Upload form</button>
+        <button class="button primary" type="button" data-action="open-modal" data-modal="form-upload" ${localUploadStagingEnabled ? "" : "disabled"} title="${localUploadStagingEnabled ? "Stage a development-only local copy" : "Deploy the private prepare/scan/commit upload service first"}">${localUploadStagingEnabled ? "Stage form locally" : "Upload service required"}</button>
       `;
     }
     if (view === "documents") {
@@ -936,7 +2178,7 @@
       return `<button class="button primary" type="button" data-action="prototype-action" data-message="Invitations will be email-based and scoped to a company role and one or more locations.">Invite worker</button>`;
     }
     if (view === "locations") {
-      return `<button class="button primary" type="button" data-action="prototype-action" data-message="Location creation will use a tenant-scoped Supabase workflow.">Add location</button>`;
+      return `<button class="button primary" type="button" ${canManageCompany() ? "" : "disabled"} data-action="open-modal" data-modal="location">Add location</button>`;
     }
     return "";
   }
@@ -965,7 +2207,23 @@
     const inspections = average(selectedLocations.map((location) => location.inspections));
     const urgent = selectedActions.filter((action) => ["Critical", "High"].includes(action.priority) && action.status !== "Closed").length;
     const openIncidents = selectedIncidents.filter((incident) => incident.status !== "Closed").length;
-    return { training, inspections, urgent, openIncidents };
+    const knownAcknowledgements = data.documents
+      .map((documentRecord) => documentRecord.acknowledgement)
+      .filter((value) => typeof value === "number");
+    const documentAcknowledgements = average(knownAcknowledgements);
+    const selectedPeople = filterLocation(data.people);
+    const credentialsCurrent = selectedPeople.length
+      ? Math.round((selectedPeople.filter((person) => person.status === "Current").length / selectedPeople.length) * 100)
+      : 0;
+    return { training, inspections, urgent, openIncidents, documentAcknowledgements, credentialsCurrent };
+  }
+
+  function locationReadinessScore(location) {
+    const values = [];
+    if (location?.hasTrainingData) values.push(location.training);
+    if (location?.hasInspectionData) values.push(location.inspections);
+    if (location?.hasActionData) values.push(Math.max(0, 100 - location.openActions * 10));
+    return average(values);
   }
 
   function renderMetricCard(label, value, meta, symbol, accent, trend, negative = false) {
@@ -1029,23 +2287,33 @@
     const selectedLocations = activeLocation() ? [activeLocation()] : data.locations;
     const attentionCount = filterLocation(data.actions).filter((action) => action.status === "Overdue").length +
       filterLocation(data.tasks).filter((task) => task.status === "Overdue").length;
-    const readiness = Math.round((metrics.training + metrics.inspections + (100 - metrics.urgent * 4)) / 3);
+    const readinessValues = [];
+    if (filterLocation(data.people).length) readinessValues.push(metrics.training, metrics.credentialsCurrent);
+    if (filterLocation(data.inspections).length) readinessValues.push(metrics.inspections);
+    if (data.documents.some((documentRecord) => typeof documentRecord.acknowledgement === "number")) {
+      readinessValues.push(metrics.documentAcknowledgements);
+    }
+    const readiness = average(readinessValues);
 
     return `
       ${renderPageHeading()}
       <section class="alert-strip" aria-label="Items needing attention">
-        <span class="alert-icon" aria-hidden="true">!</span>
+        <span class="alert-icon" aria-hidden="true">${attentionCount ? "!" : "✓"}</span>
         <div>
-          <strong>${attentionCount || 1} item${attentionCount === 1 ? "" : "s"} need${attentionCount === 1 ? "s" : ""} action</strong>
-          <p>A critical guardrail repair is overdue at one facility. Evidence is still missing.</p>
+          <strong>${attentionCount
+            ? `${attentionCount} item${attentionCount === 1 ? "" : "s"} need${attentionCount === 1 ? "s" : ""} action`
+            : "No overdue work is recorded"}</strong>
+          <p>${attentionCount
+            ? "Review the live corrective-action and assignment queues."
+            : "This workspace starts empty. Add real company records or import authorized source material to build the program."}</p>
         </div>
         <button class="button small" type="button" data-action="navigate" data-view="actions">Review actions</button>
       </section>
       <section class="metric-grid" aria-label="Safety performance metrics">
-        ${renderMetricCard("Training current", `${metrics.training}%`, "of required assignments", "T", "var(--purple)", "↑ 3%")}
-        ${renderMetricCard("Inspections complete", `${metrics.inspections}%`, "on schedule this month", "F", "var(--blue)", "↑ 6%")}
-        ${renderMetricCard("High-priority actions", metrics.urgent, "open across selected sites", "A", "var(--red)", metrics.urgent ? "Needs review" : "On track", Boolean(metrics.urgent))}
-        ${renderMetricCard("Days without recordable", data.company.daysWithoutRecordable, `${metrics.openIncidents} open incident${metrics.openIncidents === 1 ? "" : "s"}`, "✓", "var(--accent)", "↑ 11 days")}
+        ${renderMetricCard("Training current", `${metrics.training}%`, "from live assignments", "T", "var(--purple)", "")}
+        ${renderMetricCard("Inspections complete", `${metrics.inspections}%`, "from live inspection records", "F", "var(--blue)", "")}
+        ${renderMetricCard("High-priority actions", metrics.urgent, "open across selected sites", "A", "var(--red)", metrics.urgent ? "Needs review" : "No high-priority action", Boolean(metrics.urgent))}
+        ${renderMetricCard("Days without recordable", data.company.daysWithoutRecordable ?? "—", `${metrics.openIncidents} open incident${metrics.openIncidents === 1 ? "" : "s"}`, "✓", "var(--accent)", data.company.daysWithoutRecordable === null ? "Awaiting verified history" : "")}
       </section>
       <section class="dashboard-grid">
         <div class="stack">
@@ -1073,7 +2341,7 @@
                   <p class="activity-text">${escapeHtml(item.text)}</p>
                   <span class="activity-time">${escapeHtml(item.time)}</span>
                 </div>
-              `).join("")}
+              `).join("") || renderEmptyState("•", "No audit activity yet", "Database-authored events will appear here as the company starts using SafetyOps.")}
             </div>
           </article>
         </div>
@@ -1088,7 +2356,7 @@
             </div>
             <div class="risk-list">
               ${selectedLocations.map((location) => {
-                const score = Math.round((location.training + location.inspections + (100 - location.openActions * 2)) / 3);
+                const score = locationReadinessScore(location);
                 const color = score < 82 ? "var(--red)" : score < 90 ? "var(--amber)" : "var(--accent)";
                 return `
                   <div class="risk-row">
@@ -1097,7 +2365,7 @@
                     <div class="progress"><span style="--progress:${score}%;--progress-color:${color}"></span></div>
                   </div>
                 `;
-              }).join("")}
+              }).join("") || renderEmptyState("L", "No locations", "Create the first authorized company location to begin location reporting.")}
             </div>
           </article>
           <article class="card">
@@ -1115,8 +2383,8 @@
               <div class="readiness-list">
                 <div class="readiness-item"><span>Training records</span><strong>${metrics.training}%</strong></div>
                 <div class="readiness-item"><span>Inspection records</span><strong>${metrics.inspections}%</strong></div>
-                <div class="readiness-item"><span>Document acknowledgements</span><strong>93%</strong></div>
-                <div class="readiness-item"><span>Credentials current</span><strong>89%</strong></div>
+                <div class="readiness-item"><span>Document acknowledgements</span><strong>${metrics.documentAcknowledgements}%</strong></div>
+                <div class="readiness-item"><span>Credentials current</span><strong>${metrics.credentialsCurrent}%</strong></div>
               </div>
             </div>
           </article>
@@ -1186,11 +2454,11 @@
               <span>Last used ${escapeHtml(template.lastUsed)}</span>
             </div>
             <div class="card-footer">
-              <small>Version 1.${(template.questions % 5) + 2}</small>
-              <button class="button small primary" type="button" data-action="open-modal" data-modal="inspection" data-template-id="${template.id}">Start</button>
+              <small>Version ${escapeHtml(template.currentVersion || 1)}</small>
+              <button class="button small primary" type="button" ${!isReadOnlyAuditor() && template.published && template.currentVersionId && template.questions > 0 ? "" : "disabled"} data-action="open-modal" data-modal="inspection" data-template-id="${template.id}">Start</button>
             </div>
           </article>
-        `).join("")}
+        `).join("") || renderEmptyState("F", "No inspection templates", "Create and publish the first versioned template before scheduling field work.")}
       </section>
       <div style="height:17px"></div>
       <section class="table-card">
@@ -1209,7 +2477,10 @@
                     <td class="primary-cell">
                       ${escapeHtml(inspection.template)}
                       <span class="secondary-line">${inspection.id} · ${inspection.findings} finding${inspection.findings === 1 ? "" : "s"}</span>
-                      ${inspection.regulatorySnapshot ? `<span class="secondary-line">Template ${escapeHtml(inspection.regulatorySnapshot.templateVersion)} · OSHA snapshot ${escapeHtml(inspection.regulatorySnapshot.currentThrough)}</span>` : ""}
+                      ${inspection.regulatoryTraceStatus ? `
+                        <span class="secondary-line">Regulatory trace: ${escapeHtml(inspection.regulatoryTraceStatus)} · ${inspection.regulatoryEvidenceCount} verified evidence link${inspection.regulatoryEvidenceCount === 1 ? "" : "s"}${inspection.regulatoryUnresolvedCount ? ` · ${inspection.regulatoryUnresolvedCount} unresolved` : ""}</span>
+                        ${inspection.regulatoryContextSha256 ? `<span class="secondary-line">Context SHA-256 ${escapeHtml(inspection.regulatoryContextSha256.slice(0, 12))}...</span>` : ""}
+                      ` : inspection.regulatorySnapshot ? `<span class="secondary-line">Legacy trace context available</span>` : ""}
                       ${template ? renderCitationChips("inspection_template", template.id) : ""}
                     </td>
                     <td>${escapeHtml(locationName(inspection.locationId))}</td>
@@ -1230,19 +2501,21 @@
   function renderTraining() {
     const people = filterLocation(data.people);
     const avg = average(people.map((person) => person.training));
+    const assignmentsDue = filterLocation(data.tasks).filter((task) => task.type === "Training").length;
+    const credentialsExpiring = people.filter((person) => ["Due soon", "Expired"].includes(person.status)).length;
     return `
       ${renderPageHeading()}
       <section class="split-summary">
-        <article class="summary-card"><span>Training current</span><strong>${avg || 92}%</strong></article>
-        <article class="summary-card"><span>Assignments due</span><strong>12</strong></article>
-        <article class="summary-card"><span>Credentials expiring</span><strong>4</strong></article>
+        <article class="summary-card"><span>Training current</span><strong>${avg}%</strong></article>
+        <article class="summary-card"><span>Assignments due</span><strong>${assignmentsDue}</strong></article>
+        <article class="summary-card"><span>Credentials expiring</span><strong>${credentialsExpiring}</strong></article>
       </section>
       <section class="course-grid" aria-label="Active training campaigns">
         ${data.courses.map((course) => `
           <article class="course-card">
             <div class="course-top">
               <span class="category-badge">${escapeHtml(course.category)}</span>
-              <span class="status-pill purple">${course.languages} lang</span>
+              <span class="status-pill purple">Version ${escapeHtml(course.currentVersion || 1)}</span>
             </div>
             <h3>${escapeHtml(course.name)}</h3>
             <p>${escapeHtml(course.format)} · ${escapeHtml(course.duration)} · ${course.assigned} workers</p>
@@ -1253,10 +2526,10 @@
             </div>
             <div class="card-footer">
               <small>Due ${escapeHtml(course.due)}</small>
-              <button class="button small" type="button" data-action="open-modal" data-modal="training" data-course-id="${course.id}">Assign</button>
+              <button class="button small" type="button" ${course.published ? "" : "disabled"} data-action="open-modal" data-modal="training" data-course-id="${course.id}">Assign</button>
             </div>
           </article>
-        `).join("")}
+        `).join("") || renderEmptyState("T", "No training courses", "Create and publish a course before assigning training.")}
       </section>
       <div style="height:17px"></div>
       <section class="table-card">
@@ -1286,7 +2559,7 @@
                   <td>${escapeHtml(person.credentials)}</td>
                   <td>${statusPill(person.status)}</td>
                 </tr>
-              `).join("")}
+              `).join("") || `<tr><td colspan="5">${renderEmptyState("P", "No workers", "Invite company members and assign them to locations to begin readiness tracking.")}</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -1297,12 +2570,16 @@
   function renderIncidents() {
     const incidents = filterLocation(data.incidents);
     const open = incidents.filter((incident) => incident.status !== "Closed");
+    const closed = incidents.filter((incident) => incident.status === "Closed");
+    const medianCloseDays = closed.length
+      ? [...closed].sort((a, b) => a.daysOpen - b.daysOpen)[Math.floor((closed.length - 1) / 2)].daysOpen
+      : null;
     return `
       ${renderPageHeading()}
       <section class="split-summary">
         <article class="summary-card"><span>Open investigations</span><strong>${open.length}</strong></article>
         <article class="summary-card"><span>Near misses · 30 days</span><strong>${incidents.filter((incident) => incident.type === "Near miss").length}</strong></article>
-        <article class="summary-card"><span>Median days to close</span><strong>4.2</strong></article>
+        <article class="summary-card"><span>Median days to close</span><strong>${medianCloseDays ?? "—"}</strong></article>
       </section>
       <section class="table-card">
         <div class="table-header">
@@ -1384,21 +2661,23 @@
     ];
   }
 
-  function storedProgramRecords(key) {
-    try {
-      const value = JSON.parse(localStorage.getItem(`safetyops.${key}`) || "[]");
-      return Array.isArray(value) ? value : [];
-    } catch (_error) {
-      return [];
-    }
-  }
-
   function allFormTemplates() {
     return programLibrary.forms || [];
   }
 
+  function formAvailableForSubmission(item) {
+    return Boolean(
+      !isReadOnlyAuditor()
+      && item?.status === "published"
+      && item.schemaSha256
+      && item.programVersionId
+      && item.formTemplateVersionId
+      && (item.locations || []).length
+    );
+  }
+
   function originalFormTemplates() {
-    return allFormTemplates().filter((item) => item.originalFile?.path);
+    return allFormTemplates().filter((item) => item.originalFile?.id);
   }
 
   function formatFileSize(bytes) {
@@ -1428,8 +2707,7 @@
   }
 
   function localFormUploadOwnerId() {
-    if (state.authUser?.id) return state.authUser.id;
-    return supabaseClient ? null : "demo-user";
+    return state.authUser?.id || null;
   }
 
   async function listLocalFormUploads() {
@@ -1448,10 +2726,7 @@
       return records
         .filter((record) => (
           record.companyId === data.company.id
-          && (
-            record.userId === ownerId
-            || (ownerId === "demo-user" && !record.userId)
-          )
+          && record.userId === ownerId
         ))
         .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
     } finally {
@@ -1469,6 +2744,35 @@
           .put(record);
         request.onerror = () => reject(request.error || new Error("The form could not be saved."));
         request.onsuccess = () => resolve();
+      });
+    } finally {
+      db.close();
+    }
+  }
+
+  async function clearLocalFormUploads(companyId, userId) {
+    if (!companyId || !userId || !window.indexedDB) return;
+    const db = await openFormUploadDb();
+    try {
+      const records = await new Promise((resolve, reject) => {
+        const request = db
+          .transaction(formUploadStoreName, "readonly")
+          .objectStore(formUploadStoreName)
+          .getAll();
+        request.onerror = () => reject(request.error || new Error("Local staging could not be inspected."));
+        request.onsuccess = () => resolve(request.result || []);
+      });
+      const matchingIds = records
+        .filter((record) => record.companyId === companyId && record.userId === userId)
+        .map((record) => record.id);
+      if (!matchingIds.length) return;
+      await new Promise((resolve, reject) => {
+        const transaction = db.transaction(formUploadStoreName, "readwrite");
+        const store = transaction.objectStore(formUploadStoreName);
+        matchingIds.forEach((id) => store.delete(id));
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error || new Error("Local staging could not be cleared."));
+        transaction.onabort = () => reject(transaction.error || new Error("Local staging clear was aborted."));
       });
     } finally {
       db.close();
@@ -1499,7 +2803,22 @@
       .join("");
   }
 
+  async function sha256Text(value) {
+    if (!window.crypto?.subtle) throw new Error("This browser cannot calculate a secure record fingerprint.");
+    const digest = await window.crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(String(value))
+    );
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
   async function hydrateLocalFormUploads() {
+    if (!localUploadStagingEnabled) {
+      state.localFormUploads = [];
+      return;
+    }
     try {
       state.localFormUploads = await listLocalFormUploads();
       if (state.view === "programs" && state.programCategory === "forms") render();
@@ -1562,25 +2881,26 @@
     return `
       <article class="program-card private form-file-card">
         <div class="program-card-top">
-          <span class="program-type form">PDF</span>
+          <span class="program-type form">FILE</span>
           <span class="private-source-badge">Controlled original</span>
         </div>
         <h3>${escapeHtml(item.title)}</h3>
-        <p class="program-card-description">The verified blank source form is stored with its immutable fingerprint and linked interactive template.</p>
+        <p class="program-card-description">The original is linked to this exact template version. Access is re-authorized before a short-lived private download is issued.</p>
         <div class="program-tags">
           ${tags.map((tag) => `<span class="program-tag">${escapeHtml(tag)}</span>`).join("")}
         </div>
         <div class="program-card-meta">
-          <span>${Number(original.pageCount || 0)} page${Number(original.pageCount || 0) === 1 ? "" : "s"}</span>
-          <span>${escapeHtml(formatFileSize(original.byteSize))}</span>
-          <span>${original.fillablePdf ? "Fillable PDF" : "Print-ready PDF"}</span>
+          <span>${escapeHtml(item.version)}</span>
+          <span>${escapeHtml(original.access)}</span>
+          <span>Tenant authorized</span>
         </div>
         <div class="program-card-footer">
-          <span class="program-version" title="${escapeHtml(original.sha256)}">SHA-256 · ${escapeHtml(String(original.sha256 || "").slice(0, 12))}…</span>
+          <span class="program-version" title="${escapeHtml(item.sourceManifestSha256 || "")}">${item.sourceManifestSha256
+            ? `Source manifest · ${escapeHtml(item.sourceManifestSha256.slice(0, 12))}…`
+            : "Source manifest pending"}</span>
           <div class="program-card-actions">
-            <button class="button small" type="button" data-action="view-form-original" data-form-id="${escapeHtml(item.id)}">View PDF</button>
-            <a class="button small" href="${escapeHtml(original.path)}" download="${escapeHtml(original.filename)}">Download</a>
-            <button class="button small primary" type="button" data-action="start-program-form" data-form-id="${escapeHtml(item.id)}">Use template</button>
+            <button class="button small" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Secure download</button>
+            <button class="button small primary" type="button" data-action="start-program-form" data-form-id="${escapeHtml(item.id)}" ${formAvailableForSubmission(item) ? "" : "disabled"}>Use template</button>
           </div>
         </div>
       </article>
@@ -1598,7 +2918,7 @@
           <span class="local-only-badge">Local only</span>
         </div>
         <h3>${escapeHtml(item.title)}</h3>
-        <p class="program-card-description">${escapeHtml(item.filename)} is stored in this browser's private IndexedDB prototype store. It is not included in the public GitHub build.</p>
+        <p class="program-card-description">${escapeHtml(item.filename)} is stored in this browser's development-only private IndexedDB staging area. It is not included in the public GitHub build.</p>
         <div class="program-tags">
           <span class="program-tag">${escapeHtml(item.category || "Company form")}</span>
           ${(item.locationIds || []).map((id) => `<span class="program-tag">${escapeHtml(id === "all" ? "All locations" : locationName(id))}</span>`).join("")}
@@ -1656,8 +2976,8 @@
           <div class="program-card-actions">
             <button class="button small" type="button" data-action="open-program" data-program-id="${escapeHtml(item.id)}">Details</button>
             ${isForm
-              ? `${item.originalFile ? `<button class="button small" type="button" data-action="view-form-original" data-form-id="${escapeHtml(item.id)}">View original</button>` : ""}
-                 <button class="button small primary" type="button" data-action="start-program-form" data-form-id="${escapeHtml(item.id)}">Start form</button>`
+              ? `${item.originalFile ? `<button class="button small" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Secure original</button>` : ""}
+                 <button class="button small primary" type="button" data-action="start-program-form" data-form-id="${escapeHtml(item.id)}" ${formAvailableForSubmission(item) ? "" : "disabled"}>Start form</button>`
               : item.sourceUrl ? `<a class="button small" href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open source</a>` : ""}
           </div>
         </div>
@@ -1669,7 +2989,9 @@
     if (state.programCategory !== "forms") return "";
     const modes = [
       { id: "originals", label: "Original forms", count: originalFormTemplates().length },
-      { id: "uploads", label: "My uploads", count: state.localFormUploads.length },
+      ...(localUploadStagingEnabled
+        ? [{ id: "uploads", label: "Local staging", count: state.localFormUploads.length }]
+        : []),
       { id: "templates", label: "Templates", count: allFormTemplates().length }
     ];
     return `
@@ -1686,10 +3008,10 @@
             >${escapeHtml(mode.label)} <span>${mode.count}</span></button>
           `).join("")}
         </div>
-        <button class="button primary" type="button" data-action="open-modal" data-modal="form-upload">Upload company form</button>
+        <button class="button primary" type="button" data-action="open-modal" data-modal="form-upload" ${localUploadStagingEnabled ? "" : "disabled"} title="${localUploadStagingEnabled ? "Stage a development-only local copy" : "Deploy the private prepare/scan/commit upload service first"}>${localUploadStagingEnabled ? "Stage form locally" : "Upload service required"}</button>
       </div>
       <div class="form-storage-boundary">
-        <strong>${state.formLibraryMode === "uploads" ? "Prototype storage" : "Controlled form library"}</strong>
+        <strong>${state.formLibraryMode === "uploads" ? "Development-only local staging" : "Controlled form library"}</strong>
         <span>${state.formLibraryMode === "uploads"
           ? "Uploads stay in this browser only. Production uses a private Supabase bucket, tenant RLS, malware scanning, and short-lived signed URLs."
           : "Original files remain immutable; templates and completed submissions keep their source version and SHA-256 trace."}</span>
@@ -1707,13 +3029,13 @@
       { id: "resources", label: "Resources", icon: "R", count: (programLibrary.looseResources || []).length }
     ];
     const rows = filteredProgramRows();
-    const submissions = storedProgramRecords("formSubmissions");
+    const submissions = data.programSubmissions || [];
     const indexedItems = (programLibrary.folders || []).reduce((sum, folder) => sum + Number(folder.itemCount || 0), 0);
     const extraction = programLibrary.meta.extraction || { extracted: 0, imageOnly: 0, ocrRequired: 0 };
     const hasTenantLibrary = programLibraryItems().length > 0;
     const formModeLabel = {
       originals: "Original forms",
-      uploads: "My uploads",
+      uploads: "Local staging",
       templates: "Interactive templates"
     }[state.formLibraryMode] || "Forms";
 
@@ -1723,7 +3045,7 @@
         <article class="summary-card"><span>Company programs</span><strong>${(programLibrary.programs || []).length}</strong></article>
         <article class="summary-card"><span>Original form PDFs</span><strong>${originalFormTemplates().length}</strong></article>
         <article class="summary-card"><span>Interactive templates</span><strong>${allFormTemplates().length}</strong></article>
-        <article class="summary-card"><span>Prototype submissions</span><strong>${submissions.filter((item) => item.status === "Submitted").length}</strong></article>
+        <article class="summary-card"><span>Submitted forms</span><strong>${submissions.filter((item) => item.status === "Submitted").length}</strong></article>
       </section>
       <div style="height:14px"></div>
       ${hasTenantLibrary ? `<section class="import-status running" aria-label="Safety program ingestion status">
@@ -1732,7 +3054,7 @@
           <strong>Private-source inventory connected</strong>
           <p>${extraction.extracted} of ${(programLibrary.programs || []).length} program sources have traceable text outlines; ${indexedItems} source items are indexed. ${escapeHtml(programLibrary.meta.ingestionMode || "Source metadata is indexed.")}</p>
         </div>
-        <span class="status-pill pending">Supabase binary sync pending</span>
+        <span class="status-pill ${programLibrary.programs.some((item) => item.programStatus === "published") ? "current" : "pending"}">${programLibrary.programs.some((item) => item.programStatus === "published") ? "Controlled records active" : "Publication review required"}</span>
       </section>` : `<section class="import-status" aria-label="Tenant library status">
         <span class="import-status-icon">RLS</span>
         <div>
@@ -1890,7 +3212,7 @@
                     <div class="source-file-row">
                       <span class="source-file-icon">FORM</span>
                       <div><strong>${escapeHtml(form.title)}</strong><span>${escapeHtml(form.mappingStatus)}</span></div>
-                      <button class="button small" type="button" data-action="start-program-form" data-form-id="${escapeHtml(form.id)}">Start</button>
+                      <button class="button small" type="button" data-action="start-program-form" data-form-id="${escapeHtml(form.id)}" ${formAvailableForSubmission(form) ? "" : "disabled"}>Start</button>
                     </div>
                   `).join("")}
                 </div>
@@ -1901,7 +3223,7 @@
               <ol class="version-timeline">
                 <li class="version-item current">
                   <span class="version-dot">1</span>
-                  <div><strong>Google Drive source linked</strong><p>External identity and source path preserved for secure ingestion.</p></div>
+                  <div><strong>${escapeHtml(item.sourceSystem || "Controlled source")} linked</strong><p>The source identity and exact controlled version are preserved for secure ingestion and review.</p></div>
                   <time>${escapeHtml(item.sourceCapturedOn || programLibrary.meta.sourceCapturedOn || "")}</time>
                 </li>
                 <li class="version-item">
@@ -1917,8 +3239,8 @@
               </ol>
             </section>
             <div class="source-version-fingerprint">
-              <span>External source identity — not a content hash</span>
-              <code>google-drive:${escapeHtml(item.sourceId || "unavailable")}</code>
+              <span>Controlled source identity — not a content hash</span>
+              <code>${escapeHtml(item.sourceSystem === "Supabase controlled records" ? "supabase" : "external")}:${escapeHtml(item.sourceId || "unavailable")}</code>
             </div>
             ${item.binary?.sha256 ? `
               <div class="source-version-fingerprint">
@@ -1936,13 +3258,15 @@
             ` : ""}
           </div>
           <footer class="program-drawer-footer">
-            ${item.originalFile ? `
+            ${item.originalFile?.id ? `
+              <button class="button" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Secure original download</button>
+            ` : item.originalFile?.path ? `
               <button class="button" type="button" data-action="view-form-original" data-form-id="${escapeHtml(item.id)}">View original PDF</button>
               <a class="button" href="${escapeHtml(item.originalFile.path)}" download="${escapeHtml(item.originalFile.filename)}">Download original</a>
             ` : item.sourceUrl ? `<a class="button" href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open source</a>` : ""}
             ${isForm
-              ? `<button class="button primary" type="button" data-action="start-program-form" data-form-id="${escapeHtml(item.id)}">Start digital form</button>`
-              : `<button class="button primary" type="button" data-action="assign-program" data-program-id="${escapeHtml(item.id)}">Assign acknowledgement</button>`}
+              ? `<button class="button primary" type="button" data-action="start-program-form" data-form-id="${escapeHtml(item.id)}" ${formAvailableForSubmission(item) ? "" : "disabled"}>Start digital form</button>`
+              : `<button class="button primary" type="button" data-action="assign-program" data-program-id="${escapeHtml(item.id)}" ${item.programStatus === "published" && (item.locations || []).some((locationId) => canWriteLocation(locationId)) ? "" : "disabled"}>Assign to me</button>`}
           </footer>
         </aside>
       </div>
@@ -1983,12 +3307,48 @@
     const fieldId = `${formId}-${field.id}`;
     const required = field.required ? "required" : "";
     const requiredLabel = field.required ? " <span aria-hidden=\"true\">*</span>" : "";
+    const hint = field.helpText
+      ? `<p class="field-hint">${escapeHtml(field.helpText)}</p>`
+      : "";
+
+    if (field.type === "instruction") {
+      return `<div class="runner-field runner-instruction"><strong>${escapeHtml(field.label)}</strong>${hint}</div>`;
+    }
 
     if (field.type === "textarea") {
-      return `<div class="runner-field"><label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label><textarea id="${fieldId}" name="${escapeHtml(field.id)}" ${required}></textarea></div>`;
+      return `<div class="runner-field"><label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label><textarea id="${fieldId}" name="${escapeHtml(field.id)}" placeholder="${escapeHtml(field.placeholder || "")}" ${required}></textarea>${hint}</div>`;
     }
     if (field.type === "location") {
-      return `<div class="runner-field"><label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label><select id="${fieldId}" name="${escapeHtml(field.id)}" ${required}>${renderLocationOptions(false, state.locationId === "all" ? data.locations[0]?.id : state.locationId)}</select></div>`;
+      const form = allFormTemplates().find((item) => item.id === formId);
+      const allowedLocations = data.locations.filter((location) =>
+        (form?.locations || []).includes(location.id)
+      );
+      const selectedLocationId = state.locationId !== "all" && allowedLocations.some((location) =>
+        location.id === state.locationId
+      )
+        ? state.locationId
+        : allowedLocations[0]?.id;
+      return `
+        <div class="runner-field">
+          <label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label>
+          <select id="${fieldId}" name="${escapeHtml(field.id)}" ${required}>
+            ${allowedLocations.map((location) => `<option value="${escapeHtml(location.id)}" ${location.id === selectedLocationId ? "selected" : ""}>${escapeHtml(location.name)}</option>`).join("")}
+          </select>
+          ${hint}
+        </div>
+      `;
+    }
+    if (field.type === "employee") {
+      return `
+        <div class="runner-field">
+          <label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label>
+          <select id="${fieldId}" name="${escapeHtml(field.id)}" ${required}>
+            <option value="">Choose a team member</option>
+            ${data.people.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name)}</option>`).join("")}
+          </select>
+          ${hint}
+        </div>
+      `;
     }
     if (field.type === "select") {
       return `
@@ -1997,8 +3357,24 @@
           <select id="${fieldId}" name="${escapeHtml(field.id)}" ${required}>
             <option value="">Choose an option</option>
             ${(field.options || []).map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("")}
-          </select>
+          </select>${hint}
         </div>
+      `;
+    }
+    if (field.type === "multiselect") {
+      return `
+        <fieldset class="runner-field">
+          <legend>${escapeHtml(field.label)}${requiredLabel}</legend>
+          <div class="runner-choice-grid">
+            ${(field.options || []).map((option, index) => `
+              <div class="runner-option">
+                <input id="${fieldId}-${index}" type="checkbox" name="${escapeHtml(field.id)}" value="${escapeHtml(option)}">
+                <label for="${fieldId}-${index}">${escapeHtml(option)}</label>
+              </div>
+            `).join("")}
+          </div>
+          ${hint}
+        </fieldset>
       `;
     }
     if (field.type === "yesno") {
@@ -2008,7 +3384,7 @@
           <div class="runner-choice-grid">
             <div class="runner-option"><input id="${fieldId}-yes" type="radio" name="${escapeHtml(field.id)}" value="Yes" ${required}><label for="${fieldId}-yes">Yes</label></div>
             <div class="runner-option"><input id="${fieldId}-no" type="radio" name="${escapeHtml(field.id)}" value="No"><label for="${fieldId}-no">No</label></div>
-          </div>
+          </div>${hint}
         </fieldset>
       `;
     }
@@ -2018,10 +3394,22 @@
           <label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label>
           <div class="file-drop-zone">
             <strong>Add evidence</strong>
-            <span>This prototype stores file metadata locally. Production sends the file to private Supabase Storage after a secure upload session.</span>
+            <span>Development-only staging stores file metadata locally. Production requires private Supabase Storage after an authorized, quarantined, malware-scanned upload session.</span>
             <input id="${fieldId}" name="${escapeHtml(field.id)}" type="file" accept="image/*,.pdf" ${required}>
-          </div>
+          </div>${hint}
         </div>
+      `;
+    }
+    if (field.type === "acknowledgement") {
+      return `
+        <fieldset class="runner-field">
+          <legend>${escapeHtml(field.label)}${requiredLabel}</legend>
+          <div class="runner-option">
+            <input id="${fieldId}" name="${escapeHtml(field.id)}" type="checkbox" value="Acknowledged" ${required}>
+            <label for="${fieldId}">I acknowledge this statement</label>
+          </div>
+          ${hint}
+        </fieldset>
       `;
     }
     if (field.type === "signature") {
@@ -2029,14 +3417,16 @@
         <div class="runner-field">
           <label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label>
           <div class="signature-field">
-            <span>Type your full name to apply a prototype electronic signature.</span>
+            <span>Type your full name to apply an electronic signature to this exact form payload.</span>
             <input id="${fieldId}" name="${escapeHtml(field.id)}" autocomplete="name" ${required}>
-          </div>
+          </div>${hint}
         </div>
       `;
     }
-    const inputType = field.type === "date" || field.type === "datetime-local" ? field.type : "text";
-    return `<div class="runner-field"><label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label><input id="${fieldId}" name="${escapeHtml(field.id)}" type="${inputType}" ${required}></div>`;
+    const inputType = ["date", "time", "datetime-local", "number"].includes(field.type)
+      ? field.type
+      : "text";
+    return `<div class="runner-field"><label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label><input id="${fieldId}" name="${escapeHtml(field.id)}" type="${inputType}" placeholder="${escapeHtml(field.placeholder || "")}" ${required}>${hint}</div>`;
   }
 
   function renderProgramFormRunner() {
@@ -2047,7 +3437,7 @@
         <section class="modal wide form-runner" role="dialog" aria-modal="true" aria-labelledby="program-form-title">
           <header class="modal-header form-runner-header">
             <div>
-              <p class="section-kicker">${escapeHtml(form.category)} · Draft digital mapping</p>
+              <p class="section-kicker">${escapeHtml(form.category)} · Controlled schema ${escapeHtml(form.version)}</p>
               <h2 id="program-form-title">${escapeHtml(form.title)}</h2>
               <p>A submitted response preserves the form wording, source identity, citations, signer, and timestamp.</p>
             </div>
@@ -2087,12 +3477,20 @@
   }
 
   function renderDocuments() {
+    const awaitingAcknowledgement = data.documents.filter((documentRecord) =>
+      documentRecord.acknowledgementRequired && documentRecord.acknowledgement !== 100
+    ).length;
+    const reviewWindowEnd = Date.now() + 90 * 86_400_000;
+    const reviewsDue = data.documents.filter((documentRecord) => {
+      const reviewDate = new Date(documentRecord.review).getTime();
+      return Number.isFinite(reviewDate) && reviewDate <= reviewWindowEnd;
+    }).length;
     return `
       ${renderPageHeading()}
       <section class="split-summary">
         <article class="summary-card"><span>Controlled documents</span><strong>${data.documents.length}</strong></article>
-        <article class="summary-card"><span>Awaiting acknowledgement</span><strong>30</strong></article>
-        <article class="summary-card"><span>Reviews due · 90 days</span><strong>2</strong></article>
+        <article class="summary-card"><span>My acknowledgements due</span><strong>${awaitingAcknowledgement}</strong></article>
+        <article class="summary-card"><span>Reviews due · 90 days</span><strong>${reviewsDue}</strong></article>
       </section>
       <section class="table-card">
         <div class="table-header">
@@ -2106,7 +3504,7 @@
         </div>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Document</th><th>Type</th><th>Owner</th><th>Review date</th><th>Acknowledged</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Document</th><th>Type</th><th>Owner</th><th>Review date</th><th>Your acknowledgement</th><th>Status</th><th></th></tr></thead>
             <tbody>
               ${data.documents.map((documentRecord) => `
                 <tr>
@@ -2119,15 +3517,19 @@
                   <td>${escapeHtml(documentRecord.owner)}</td>
                   <td>${escapeHtml(documentRecord.review)}</td>
                   <td>
-                    <div class="training-progress">
-                      <strong>${documentRecord.acknowledgement}%</strong>
-                      <div class="progress"><span style="--progress:${documentRecord.acknowledgement}%;--progress-color:${documentRecord.acknowledgement < 90 ? "var(--amber)" : "var(--accent)"}"></span></div>
-                    </div>
+                    ${documentRecord.acknowledgement === null
+                      ? `<span class="secondary-line">Not calculated</span>`
+                      : `
+                        <div class="training-progress">
+                          <strong>${documentRecord.acknowledgement}%</strong>
+                          <div class="progress"><span style="--progress:${documentRecord.acknowledgement}%;--progress-color:${documentRecord.acknowledgement < 90 ? "var(--amber)" : "var(--accent)"}"></span></div>
+                        </div>
+                      `}
                   </td>
                   <td>${statusPill(documentRecord.status)}</td>
-                  <td><button class="button small" type="button" data-action="acknowledge-document" data-document-id="${documentRecord.id}">Acknowledge</button></td>
+                  <td><button class="button small" type="button" ${isReadOnlyAuditor() || documentRecord.acknowledgement === null || documentRecord.acknowledgement === 100 ? "disabled" : ""} data-action="acknowledge-document" data-document-id="${documentRecord.id}">${documentRecord.acknowledgement === 100 ? "Acknowledged" : "Acknowledge"}</button></td>
                 </tr>
-              `).join("")}
+              `).join("") || `<tr><td colspan="7">${renderEmptyState("D", "No controlled documents", "Upload and publish the first company document to begin the controlled library.")}</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -2145,7 +3547,7 @@
     return `
       ${renderPageHeading()}
       <section class="split-summary">
-        <article class="summary-card"><span>Active workers</span><strong>${activeLocation()?.people || data.company.activeWorkers}</strong></article>
+        <article class="summary-card"><span>Active workers</span><strong>${activeLocation() ? activeLocation().people : data.company.activeWorkers}</strong></article>
         <article class="summary-card"><span>Credentials due soon</span><strong>${people.filter((person) => person.status === "Due soon").length}</strong></article>
         <article class="summary-card"><span>Expired credentials</span><strong>${people.filter((person) => person.status === "Expired").length}</strong></article>
       </section>
@@ -2195,23 +3597,30 @@
       ${renderPageHeading()}
       <section class="location-grid">
         ${data.locations.map((location) => {
-          const readiness = Math.round((location.training + location.inspections + (100 - location.openActions * 2)) / 3);
+          const readiness = locationReadinessScore(location);
           return `
             <article class="location-card">
               <div class="location-top">
                 <span class="location-accent" style="--location-accent:${location.accent}"></span>
                 <div>
                   <h3>${escapeHtml(location.name)}</h3>
+                  <div class="location-jurisdiction">
+                    <span class="binding-badge ${jurisdictionForLocation(location) === "US-FED" ? "regulation" : "state-plan"}">${escapeHtml(jurisdictionLabel(jurisdictionForLocation(location)))}</span>
+                    ${statusPill(
+                      location.regulatoryProfileStatus === "approved" ? "Jurisdiction approved" : "Jurisdiction review required",
+                      location.regulatoryProfileStatus === "approved" ? "green" : "amber"
+                    )}
+                  </div>
                   <p>${escapeHtml(location.city)} · ${escapeHtml(location.type)}</p>
                 </div>
               </div>
               <div class="location-score-grid">
-                <div class="location-score"><strong>${location.training}%</strong><span>Training</span></div>
-                <div class="location-score"><strong>${location.inspections}%</strong><span>Inspections</span></div>
+                <div class="location-score"><strong>${location.hasTrainingData ? `${location.training}%` : "—"}</strong><span>Training</span></div>
+                <div class="location-score"><strong>${location.hasInspectionData ? `${location.inspections}%` : "—"}</strong><span>Inspections</span></div>
                 <div class="location-score"><strong>${location.openActions}</strong><span>Open actions</span></div>
               </div>
               <div class="course-progress">
-                <div class="course-progress-header"><span>Readiness</span><strong>${readiness}%</strong></div>
+                <div class="course-progress-header"><span>Readiness</span><strong>${readiness ? `${readiness}%` : "Not measured"}</strong></div>
                 <div class="progress"><span style="--progress:${readiness}%;--progress-color:${readiness < 82 ? "var(--red)" : readiness < 90 ? "var(--amber)" : "var(--accent)"}"></span></div>
               </div>
               <div class="card-footer">
@@ -2227,23 +3636,74 @@
   }
 
   function applicableJurisdictions() {
-    const federal = regulatory.statePlans.find((plan) => plan.jurisdiction === "US-FED");
-    if (state.locationId === "all") {
-      return [
-        ...(federal ? [federal] : []),
-        ...regulatory.statePlans.filter((plan) => plan.jurisdiction !== "US-FED")
-      ];
+    const jurisdictions = state.locationId === "all"
+      ? [...new Set(data.locations.map(jurisdictionForLocation))]
+      : [jurisdictionForLocation(activeLocation())];
+    const statePlans = jurisdictions
+      .filter((jurisdiction) => !["US-FED", "US-FED-OSHA"].includes(jurisdiction))
+      .map(planForJurisdiction)
+      .filter(Boolean);
+    const federal = planForJurisdiction("US-FED");
+    if (!statePlans.length) return federal ? [federal] : [];
+    return [
+      ...statePlans,
+      ...(federal ? [{
+        ...federal,
+        coverage: "Federal baseline and retained-jurisdiction reference; the reviewed state profile remains primary for ordinary covered work.",
+        note: "Use the federal layer for cross-reference and documented carve-outs. Do not replace the controlling state rule with federal text."
+      }] : [])
+    ];
+  }
+
+  function standardsForAuthority() {
+    const jurisdictions = state.locationId === "all"
+      ? [...new Set(data.locations.map(jurisdictionForLocation))]
+      : [jurisdictionForLocation(activeLocation())];
+    const stateJurisdictions = jurisdictions.filter((jurisdiction) =>
+      !["US-FED", "US-FED-OSHA"].includes(jurisdiction)
+    );
+    const stateStandards = stateRegulatory.standards
+      .filter((standard) => stateJurisdictions.includes(standard.jurisdiction))
+      .map((standard) => ({
+        ...standard,
+        catalogType: "state",
+        bindingLevel: standard.bindingLevel || "state-plan"
+      }));
+    const federalStandards = regulatory.standards.map((standard) => ({
+      ...standard,
+      catalogType: "federal",
+      jurisdiction: standard.jurisdiction || "US-FED"
+    }));
+
+    if (state.standardAuthority === "federal") return federalStandards;
+    if (state.standardAuthority === "combined") return [...stateStandards, ...federalStandards];
+    if (jurisdictions.some((jurisdiction) => ["US-FED", "US-FED-OSHA"].includes(jurisdiction))) {
+      return [...stateStandards, ...federalStandards];
     }
-    const direct = regulatory.statePlans.filter((plan) => plan.locationIds.includes(state.locationId));
-    if (direct.some((plan) => plan.jurisdiction === "US-FED")) return direct;
-    return [...direct, ...(federal ? [{ ...federal, coverage: "Federal baseline reference; verify state-plan adoption and carve-outs" }] : [])];
+    return stateStandards.length ? stateStandards : federalStandards;
+  }
+
+  function standardGroupOptions(standards) {
+    const groups = new Map();
+    standards.forEach((standard) => {
+      const id = standard.groupCode || standard.part;
+      if (!id || groups.has(id)) return;
+      groups.set(id, {
+        id,
+        title: standard.groupTitle || standard.partTitle || "",
+        catalogType: standard.catalogType
+      });
+    });
+    return [...groups.values()].sort((a, b) =>
+      a.catalogType.localeCompare(b.catalogType) || a.id.localeCompare(b.id, undefined, { numeric: true })
+    );
   }
 
   function filteredStandards() {
     const query = state.standardQuery.trim().toLowerCase();
-    return regulatory.standards.filter((standard) => {
+    return standardsForAuthority().filter((standard) => {
       if (state.standardMode === "featured" && !query && !standard.featured) return false;
-      if (state.standardPart !== "all" && standard.part !== state.standardPart) return false;
+      if (state.standardPart !== "all" && (standard.groupCode || standard.part) !== state.standardPart) return false;
       if (state.standardScope !== "all" && standard.scope !== state.standardScope) return false;
       if (!query) return true;
       const haystack = [
@@ -2253,6 +3713,10 @@
         standard.partTitle,
         standard.subpart,
         standard.subpartTitle,
+        standard.groupCode,
+        standard.groupTitle,
+        standard.authority,
+        standard.jurisdiction,
         standard.scope,
         standard.summary,
         ...(standard.topics || [])
@@ -2264,10 +3728,23 @@
   function renderStandards() {
     const results = filteredStandards();
     const visibleResults = results.slice(0, 80);
-    const scopes = [...new Set(regulatory.standards.map((standard) => standard.scope).filter(Boolean))].sort();
+    const authorityStandards = standardsForAuthority();
+    const scopes = [...new Set(authorityStandards.map((standard) => standard.scope).filter(Boolean))].sort();
+    const groups = standardGroupOptions(authorityStandards);
     const plans = applicableJurisdictions();
     const locationLabel = activeLocation()?.name || allLocationsLabel();
+    const context = locationRegulatoryContext();
     const coreSnapshots = regulatory.partSnapshots?.length || 0;
+    const stateResultCount = authorityStandards.filter((standard) => standard.catalogType === "state").length;
+    const federalResultCount = authorityStandards.filter((standard) => standard.catalogType === "federal").length;
+    const statusTitle = state.standardAuthority === "federal"
+      ? "Federal OSHA baseline indexed"
+      : state.standardAuthority === "combined"
+        ? "State authority and federal baseline shown together"
+        : "Controlling rules follow the selected location";
+    const statusDetail = state.standardAuthority === "federal"
+      ? `eCFR Title 29, Chapter XVII is current through ${regulatory.meta.currentThrough || "unavailable"}.`
+      : `${stateResultCount} curated state rule records are linked to official sources checked ${stateRegulatory.meta.checkedOn || "2026-07-30"}; exact source snapshots and legal crosswalks remain under review.`;
 
     return `
       ${renderPageHeading()}
@@ -2276,24 +3753,24 @@
         <div>
           <span class="status-dot" aria-hidden="true"></span>
           <div>
-            <strong>Federal corpus indexed · source import complete</strong>
-            <span>eCFR Title 29, Chapter XVII is current through ${escapeHtml(regulatory.meta.currentThrough || "unavailable")} · last amended ${escapeHtml(regulatory.meta.latestAmendedOn || "unavailable")}</span>
+            <strong>${escapeHtml(statusTitle)}</strong>
+            <span>${escapeHtml(statusDetail)}</span>
           </div>
         </div>
-        <span class="binding-badge regulation">${regulatory.standards.length.toLocaleString()} provisions</span>
+        <span class="binding-badge ${state.standardAuthority === "federal" ? "regulation" : "state-plan"}">${authorityStandards.length.toLocaleString()} in view</span>
       </section>
 
       <div class="trace-banner">
         <span class="trace-label">Reference guide</span>
         <div>
           <strong>Use this library to research and trace controls—not to make an automatic compliance determination.</strong>
-          <p>The eCFR is the continuously updated operational source, but it is not the official legal edition. Legal review should also verify the annual CFR, Federal Register history, and applicable state-plan rules.</p>
+          <p>For Oregon, Washington, and California locations, the state program is primary. Federal OSHA remains the baseline and controls only where the state adopts it or federal jurisdiction is retained.</p>
         </div>
       </div>
 
       <section class="split-summary" aria-label="Regulatory library metrics">
-        <article class="summary-card"><span>Indexed sections & appendices</span><strong>${regulatory.standards.length.toLocaleString()}</strong></article>
-        <article class="summary-card"><span>Chapter XVII parts</span><strong>${regulatory.parts.length}</strong></article>
+        <article class="summary-card"><span>State rules in this view</span><strong>${stateResultCount.toLocaleString()}</strong></article>
+        <article class="summary-card"><span>Federal baseline in this view</span><strong>${federalResultCount.toLocaleString()}</strong></article>
         <article class="summary-card"><span>Reviewed control links</span><strong>${regulatory.regulatoryLinks.length}</strong></article>
         <article class="summary-card"><span>Raw core-part fingerprints</span><strong>${coreSnapshots}</strong></article>
       </section>
@@ -2305,12 +3782,16 @@
             <h2>${escapeHtml(locationLabel)}</h2>
             <p>State-plan rules can be stricter or materially different from the federal baseline. Applicability requires a reviewed location profile.</p>
           </div>
+          ${statusPill(
+            context.profileStatus === "approved" ? "Jurisdiction approved" : "Jurisdiction review required",
+            context.profileStatus === "approved" ? "green" : "amber"
+          )}
         </div>
         <div class="jurisdiction-grid">
           ${plans.map((plan) => `
             <article class="jurisdiction-card">
               <div>
-                <span class="binding-badge ${plan.jurisdiction === "US-FED" ? "regulation" : "state-plan"}">${escapeHtml(plan.jurisdiction)}</span>
+                <span class="binding-badge ${["US-FED", "US-FED-OSHA"].includes(plan.jurisdiction) ? "regulation" : "state-plan"}">${escapeHtml(plan.jurisdiction)}</span>
                 <h3>${escapeHtml(plan.name)}</h3>
                 <p>${escapeHtml(plan.coverage)}</p>
               </div>
@@ -2318,6 +3799,8 @@
               <div class="jurisdiction-links">
                 <a href="${escapeHtml(plan.officialUrl)}" target="_blank" rel="noopener noreferrer">Official rules</a>
                 ${plan.legalCodeUrl ? `<a href="${escapeHtml(plan.legalCodeUrl)}" target="_blank" rel="noopener noreferrer">Legal code</a>` : ""}
+                ${plan.statePlanUrl ? `<a href="${escapeHtml(plan.statePlanUrl)}" target="_blank" rel="noopener noreferrer">Coverage</a>` : ""}
+                ${plan.changeWatchUrl ? `<a href="${escapeHtml(plan.changeWatchUrl)}" target="_blank" rel="noopener noreferrer">Rule changes</a>` : ""}
               </div>
             </article>
           `).join("")}
@@ -2325,19 +3808,29 @@
       </section>
 
       <section class="standards-filter-card">
+        <div class="authority-switch">
+          <div>
+            <strong>Authority shown</strong>
+            <span>Location rules are primary; use the other views for federal research and cross-reference.</span>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Regulatory authority view">
+            <button class="tab ${state.standardAuthority === "location" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardAuthority === "location"}" data-action="standards-authority" data-authority="location">Location rules</button>
+            <button class="tab ${state.standardAuthority === "federal" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardAuthority === "federal"}" data-action="standards-authority" data-authority="federal">Federal baseline</button>
+            <button class="tab ${state.standardAuthority === "combined" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardAuthority === "combined"}" data-action="standards-authority" data-authority="combined">Combined</button>
+          </div>
+        </div>
         <form id="standards-filter-form">
           <div class="standards-filters">
             <div class="field standards-search-field">
               <label for="standards-query">Search citations, titles, topics, and summaries</label>
-              <input id="standards-query" name="query" type="search" value="${escapeHtml(state.standardQuery)}" placeholder="Try 1910.178, forklift, fall protection…">
+              <input id="standards-query" name="query" type="search" value="${escapeHtml(state.standardQuery)}" placeholder="Try OAR, WAC, Title 8, forklift, heat…">
             </div>
             <div class="field">
-              <label for="standards-part">CFR part</label>
+              <label for="standards-part">Rule group</label>
               <select id="standards-part" name="part">
-                <option value="all">All parts</option>
-                <option value="OSH-ACT" ${state.standardPart === "OSH-ACT" ? "selected" : ""}>OSH Act</option>
-                ${regulatory.parts.filter((part) => !part.reserved).map((part) => `
-                  <option value="${escapeHtml(part.id)}" ${state.standardPart === part.id ? "selected" : ""}>Part ${escapeHtml(part.id)} · ${escapeHtml(part.title)}</option>
+                <option value="all">All rule groups</option>
+                ${groups.map((group) => `
+                  <option value="${escapeHtml(group.id)}" ${state.standardPart === group.id ? "selected" : ""}>${group.catalogType === "federal" ? "Federal" : "State"} · ${escapeHtml(group.id)}${group.title ? ` · ${escapeHtml(group.title)}` : ""}</option>
                 `).join("")}
               </select>
             </div>
@@ -2352,7 +3845,7 @@
           </div>
           <div class="tabs" aria-label="Reference result mode">
             <button class="tab ${state.standardMode === "featured" ? "active" : ""}" type="button" data-action="standards-mode" data-mode="featured">High-use standards</button>
-            <button class="tab ${state.standardMode === "all" ? "active" : ""}" type="button" data-action="standards-mode" data-mode="all">Entire OSHA chapter</button>
+            <button class="tab ${state.standardMode === "all" ? "active" : ""}" type="button" data-action="standards-mode" data-mode="all">${state.standardAuthority === "federal" ? "Entire federal chapter" : "All catalog records"}</button>
           </div>
         </form>
       </section>
@@ -2372,6 +3865,7 @@
                   <div>
                     <div class="standard-meta">
                       <span class="binding-badge ${escapeHtml(standard.bindingLevel)}">${escapeHtml(standard.bindingLevel)}</span>
+                      <span class="binding-badge ${standard.catalogType === "state" ? "state-plan" : "regulation"}">${escapeHtml(standard.jurisdiction || "US-FED")}</span>
                       <span>${escapeHtml(standard.scope)}</span>
                       ${standard.subpart ? `<span>Subpart ${escapeHtml(standard.subpart)}</span>` : ""}
                     </div>
@@ -2382,7 +3876,9 @@
                 </div>
                 <p>${escapeHtml(standard.summary || standard.partTitle || "Official provision indexed from the eCFR structure.")}</p>
                 <div class="standard-card-footer">
-                  <span>Current through ${escapeHtml(standard.currentThrough || regulatory.meta.currentThrough)}</span>
+                  <span>${standard.catalogType === "state"
+                    ? `Official state source checked ${escapeHtml(standard.checkedOn || stateRegulatory.meta.checkedOn || "not recorded")} · source snapshot pending`
+                    : `Federal baseline current through ${escapeHtml(standard.currentThrough || regulatory.meta.currentThrough)}`}</span>
                   <div>
                     <a class="button small" href="${escapeHtml(standard.officialUrl)}" target="_blank" rel="noopener noreferrer">Official text</a>
                     <button class="button small primary" type="button" data-action="open-reference" data-reference-id="${standard.id}">View trace</button>
@@ -2404,12 +3900,19 @@
             <li>Raw official source snapshot and SHA-256</li>
             <li>Retrieval, effective, review, and change history</li>
           </ol>
+          ${stateResultCount ? `
+            <div class="source-fingerprint compact pending">
+              <strong>State source snapshots</strong>
+              <code>Pending server-side ingestion</code>
+              <span>Official links checked ${escapeHtml(stateRegulatory.meta.checkedOn || "not recorded")} · human crosswalk required</span>
+            </div>
+          ` : ""}
           <div class="source-fingerprint compact">
-            <strong>Structure fingerprint</strong>
+            <strong>Federal structure fingerprint</strong>
             <code>${escapeHtml(regulatory.meta.structureSha256 || "Pending")}</code>
             <span>Generated ${escapeHtml(regulatory.meta.generatedAt || "Not recorded")}</span>
           </div>
-          <p>When a source changes, SafetyOps creates an impact review. Published forms, courses, documents, and historical evidence are never silently rewritten.</p>
+          <p>State changes enter a human impact-review queue before any form, training, or applicability rule changes. Published versions and historical evidence are never silently rewritten.</p>
           <a href="https://www.ecfr.gov/reader-aids/understanding-the-ecfr" target="_blank" rel="noopener noreferrer">How the eCFR works</a>
         </aside>
       </section>
@@ -2425,7 +3928,7 @@
           <h3>Supabase connection</h3>
           <p>The production app will use Supabase Auth, Postgres, Row Level Security, private Storage, and Edge Functions for privileged jobs.</p>
           <div class="setting-row">
-            <div><strong>Browser client</strong><span>${supabaseClient ? "Configured with a publishable key" : "Demo mode · add project URL and publishable key"}</span></div>
+            <div><strong>Browser client</strong><span>${supabaseClient ? "Configured with a publishable key" : "Connection required · add project URL and publishable key"}</span></div>
             ${statusPill(supabaseClient ? "Ready" : "Not configured", supabaseClient ? "green" : "amber")}
           </div>
           <div class="setting-row">
@@ -2440,7 +3943,7 @@
         <article class="settings-card">
           <p class="section-kicker">Preferences</p>
           <h3>Workspace behavior</h3>
-          <p>These prototype controls demonstrate future per-user settings. Durable business data will never use browser storage as its source of truth.</p>
+          <p>These planned per-user controls are not persisted yet. Durable business data never uses browser storage as its source of truth.</p>
           <div class="setting-row">
             <div><strong>Dark theme</strong><span>Device-local display preference</span></div>
             <button class="switch ${state.theme === "dark" ? "on" : ""}" type="button" data-action="toggle-theme" aria-label="Toggle dark theme"></button>
@@ -2466,7 +3969,7 @@
         <article class="settings-card">
           <p class="section-kicker">Delivery</p>
           <h3>GitHub Pages deployment</h3>
-          <p>The prototype remains a portable static application. GitHub hosts only public assets; Supabase owns authenticated records, authorization, private files, and server-side secrets.</p>
+          <p>The application shell remains portable and static. GitHub hosts only public assets; Supabase owns authenticated records, authorization, private files, and server-side secrets.</p>
           <div class="setting-row"><div><strong>Static application</strong><span>HTML, CSS, and modular browser JavaScript</span></div>${statusPill("Ready", "green")}</div>
           <div class="setting-row"><div><strong>Release gate</strong><span>Smoke, accessibility, and security checks before publish</span></div>${statusPill("Prepared", "blue")}</div>
           <div class="setting-row"><div><strong>Offline queue</strong><span>Planned as a first-class field requirement</span></div>${statusPill("Next", "amber")}</div>
@@ -2490,7 +3993,7 @@
       { type: "Safety program", rows: programLibrary.programs || [], fields: ["title", "sourceName", "description", "topics", "citations"], view: "programs" },
       { type: "Digital form", rows: programLibrary.forms || [], fields: ["title", "sourceName", "category", "citations"], view: "programs" },
       { type: "Source folder", rows: programLibrary.folders || [], fields: ["title", "category", "children", "language"], view: "programs" },
-      { type: "OSHA standard", rows: regulatory.standards, fields: ["citation", "identifier", "title", "partTitle", "scope", "summary", "topics"], view: "standards" }
+      { type: "OSHA standard", rows: allStandards(), fields: ["citation", "identifier", "title", "partTitle", "groupCode", "authority", "jurisdiction", "scope", "summary", "topics"], view: "standards" }
     ];
     sources.forEach((sourceGroup) => {
       sourceGroup.rows.forEach((record) => {
@@ -2570,50 +4073,38 @@
     return (views[state.view] || renderDashboard)();
   }
 
+  function renderLocationAccessNotice() {
+    if (data.locations.length) return "";
+    const administrator = canManageCompany();
+    return `
+      <section class="trace-banner" aria-live="polite">
+        <span class="trace-label">${administrator ? "Setup required" : "Access required"}</span>
+        <div>
+          <strong>${administrator ? "Create an active company location" : "No active location is assigned to your account"}</strong>
+          <p>${administrator
+            ? "Operational records require a location so jurisdiction, access, and evidence can be pinned correctly."
+            : "A company administrator must assign you to an active location before you can report incidents, run inspections, or complete location-scoped work."}</p>
+          ${administrator ? `<button class="button small primary" type="button" data-action="navigate" data-view="locations">Open locations</button>` : ""}
+        </div>
+      </section>
+    `;
+  }
+
   function inspectionQuestionsFor(templateId) {
-    const questionsByTemplate = {
-      "tpl-daily": [
-        { prompt: "Walking-working surfaces are clean, orderly, sanitary, and free of unresolved hazards.", requirementIds: ["req-1910-22-a-1"] },
-        { prompt: "Machine guards and safety devices observed in the area are in place and effective.", requirementIds: ["req-1910-212-a-1"] },
-        { prompt: "Aisles, passageways, and work areas are maintained for safe use.", requirementIds: ["req-1910-22-a-1"] },
-        { prompt: "Any unsafe condition is documented and routed for correction.", requirementIds: ["req-1910-22-a-1", "req-1910-212-a-1"] }
-      ],
-      "tpl-jha": [
-        { prompt: "The task, steps, equipment, and foreseeable hazards are identified.", requirementIds: ["req-1910-132-d"] },
-        { prompt: "The assessment determines whether personal protective equipment is necessary.", requirementIds: ["req-1910-132-d"] },
-        { prompt: "Selected protective equipment matches the identified exposure.", requirementIds: ["req-1910-132-d"] },
-        { prompt: "The assessment and resulting controls are documented for review.", requirementIds: ["req-1910-132-d"] }
-      ],
-      "tpl-forklift": [
-        { prompt: "The powered industrial truck is in safe operating condition before use.", requirementIds: ["req-1910-178-q-7"] },
-        { prompt: "Observed defects have been reported and evaluated.", requirementIds: ["req-1910-178-q-7"] },
-        { prompt: "An unsafe truck has been removed from service.", requirementIds: ["req-1910-178-q-7"] },
-        { prompt: "The truck will remain out of service until restored to safe condition.", requirementIds: ["req-1910-178-q-7"] }
-      ],
-      "tpl-eyewash": [
-        { prompt: "Suitable quick-drenching or flushing facilities are present where corrosive exposure is possible.", requirementIds: ["req-1910-151-c"] },
-        { prompt: "The flushing facility is available for immediate emergency use.", requirementIds: ["req-1910-151-c"] },
-        { prompt: "Access to the flushing facility is clear.", requirementIds: ["req-1910-151-c"] },
-        { prompt: "Any condition that could prevent suitable flushing is documented for correction.", requirementIds: ["req-1910-151-c"] }
-      ],
-      "tpl-incident": [
-        { prompt: "The initial facts needed to assess OSHA recordkeeping are captured.", requirementIds: ["req-1904-29"] },
-        { prompt: "Potential fatality, hospitalization, amputation, or eye-loss criteria are escalated immediately.", requirementIds: ["req-1904-39"] },
-        { prompt: "The establishment, event date, and affected worker information are recorded.", requirementIds: ["req-1904-29"] },
-        { prompt: "The report preserves enough detail for a recordability and reporting review.", requirementIds: ["req-1904-29", "req-1904-39"] }
-      ]
-    };
-    return questionsByTemplate[templateId] || [
-      { prompt: "The assigned work was completed as described.", requirementIds: [] },
-      { prompt: "Participants, location, and completion time are recorded.", requirementIds: [] },
-      { prompt: "Questions or hazards raised during the activity are documented.", requirementIds: [] },
-      { prompt: "Follow-up work has an owner and due date.", requirementIds: [] }
-    ];
+    const template = data.inspectionTemplates.find((item) => item.id === templateId);
+    return (template?.questionDefinitions || [])
+      .map((question, index) => ({
+        key: String(question.key || question.id || question.name || `q${index}`),
+        prompt: question.prompt || question.label || question.title || "",
+        requirementIds: question.requirementIds || question.regulatoryRequirementIds || []
+      }))
+      .filter((question) => question.key && question.prompt);
   }
 
   function renderInspectionModal() {
     const selectedTemplate = data.inspectionTemplates.find((template) => template.id === state.selectedTemplateId) || data.inspectionTemplates[0];
     const selectedLocationId = state.locationId === "all" ? data.locations[0].id : state.locationId;
+    const selectedContext = locationRegulatoryContext(selectedLocationId);
     const questions = inspectionQuestionsFor(selectedTemplate.id);
     return `
       <div class="modal-backdrop" data-action="backdrop-close">
@@ -2630,10 +4121,9 @@
             <div class="modal-body">
               <div class="form-grid">
                 <div class="field">
-                  <label for="inspection-template">Template</label>
-                  <select id="inspection-template" name="template_id" required>
-                    ${data.inspectionTemplates.map((template) => `<option value="${template.id}" ${template.id === selectedTemplate.id ? "selected" : ""}>${escapeHtml(template.name)}</option>`).join("")}
-                  </select>
+                  <label for="inspection-template-name">Pinned template version</label>
+                  <input type="hidden" name="template_id" value="${escapeHtml(selectedTemplate.id)}">
+                  <input id="inspection-template-name" value="${escapeHtml(selectedTemplate.name)} · version ${escapeHtml(selectedTemplate.currentVersion)}" readonly>
                 </div>
                 <div class="field">
                   <label for="inspection-location">Location</label>
@@ -2648,8 +4138,9 @@
               <div class="trace-banner">
                 <span class="trace-label">Template trace</span>
                 <div>
-                  <strong>Version 1.${(selectedTemplate.questions % 5) + 2} · OSHA snapshot current through ${escapeHtml(regulatory.meta.currentThrough || "not recorded")}</strong>
-                  <p>The signed submission will preserve the question wording, mapping version, citation, jurisdiction, and source fingerprint used at submission time.</p>
+                  <strong>Version ${escapeHtml(selectedTemplate.currentVersion || 1)} · ${escapeHtml(selectedContext.jurisdictionName)} primary · federal baseline ${escapeHtml(regulatory.meta.currentThrough || "not recorded")}</strong>
+                  <p>The signed submission will preserve the location profile, jurisdiction, question wording, mapping version, citation, and available source fingerprints used at submission time. ${selectedContext.profileStatus === "approved" ? "" : "Jurisdiction review is still required."}</p>
+                  ${renderStateInspectionChips(selectedTemplate.id, selectedContext.jurisdiction)}
                   ${renderCitationChips("inspection_template", selectedTemplate.id, 3)}
                   ${selectedTemplate.id === "tpl-eyewash" ? `<small>The weekly schedule is a company control; 29 CFR 1910.151(c) addresses suitable flushing facilities and does not itself set that weekly activation frequency.</small>` : ""}
                 </div>
@@ -2675,7 +4166,7 @@
               </div>
             </div>
             <footer class="modal-footer">
-              <button class="button" type="button" data-action="close-modal">Save draft</button>
+              <button class="button" type="button" data-action="close-modal">Cancel</button>
               <button class="button primary" type="submit">Sign & submit</button>
             </footer>
           </form>
@@ -2725,11 +4216,11 @@
                 </div>
                 <div class="field">
                   <label for="incident-date">Date</label>
-                  <input id="incident-date" type="date" name="date" value="2026-07-30" required>
+                  <input id="incident-date" type="date" name="date" value="${isoDateOffset()}" required>
                 </div>
                 <div class="field full">
                   <label for="incident-title-input">What happened?</label>
-                  <input id="incident-title-input" name="title" placeholder="Short, factual title" required>
+                  <input id="incident-title-input" name="title" minlength="3" maxlength="240" placeholder="Short, factual title" required>
                 </div>
                 <div class="field full">
                   <label for="incident-description">Initial description</label>
@@ -2775,11 +4266,7 @@
                 <div class="field">
                   <label for="training-audience">Audience</label>
                   <select id="training-audience" name="audience" required>
-                    <option>All required workers</option>
-                    <option>Operators</option>
-                    <option>Supervisors</option>
-                    <option>New hires</option>
-                    <option>Selected people</option>
+                    <option value="visible_workers">All authorized workers shown for this location</option>
                   </select>
                 </div>
                 <div class="field">
@@ -2788,7 +4275,7 @@
                 </div>
                 <div class="field">
                   <label for="training-due">Due date</label>
-                  <input id="training-due" type="date" name="due_date" value="2026-08-15" required>
+                  <input id="training-due" type="date" name="due_date" value="${isoDateOffset(16)}" required>
                 </div>
                 <div class="field">
                   <label for="training-language">Default language</label>
@@ -2810,6 +4297,9 @@
 
   function renderActionModal() {
     const selectedLocationId = state.locationId === "all" ? data.locations[0].id : state.locationId;
+    const eligibleOwners = data.people.filter((person) =>
+      person.locationIds?.includes(selectedLocationId)
+    );
     return `
       <div class="modal-backdrop" data-action="backdrop-close">
         <section class="modal" role="dialog" aria-modal="true" aria-labelledby="action-title">
@@ -2824,17 +4314,17 @@
           <form id="action-form">
             <div class="modal-body">
               <div class="form-grid">
-                <div class="field full"><label for="action-name">Action</label><input id="action-name" name="title" required placeholder="Describe the required correction"></div>
+                <div class="field full"><label for="action-name">Action</label><input id="action-name" name="title" minlength="3" maxlength="240" required placeholder="Describe the required correction"></div>
                 <div class="field"><label for="action-location">Location</label><select id="action-location" name="location_id" required>${renderLocationOptions(false, selectedLocationId)}</select></div>
-                <div class="field"><label for="action-owner">Owner</label><select id="action-owner" name="owner" required>${data.people.map((person) => `<option>${escapeHtml(person.name)}</option>`).join("")}</select></div>
+                <div class="field"><label for="action-owner">Owner</label><select id="action-owner" name="owner_id" ${eligibleOwners.length ? "" : "disabled"} required>${eligibleOwners.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name)}</option>`).join("")}</select></div>
                 <div class="field"><label for="action-priority">Priority</label><select id="action-priority" name="priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div>
-                <div class="field"><label for="action-due">Due date</label><input id="action-due" type="date" name="due_date" value="2026-08-06" required></div>
+                <div class="field"><label for="action-due">Due date</label><input id="action-due" type="date" name="due_date" value="${isoDateOffset(7)}" required></div>
                 <div class="field full"><label for="action-evidence">Closeout evidence</label><select id="action-evidence" name="evidence"><option>Photo and note</option><option>Manager verification</option><option>Document upload</option><option>No evidence required</option></select></div>
               </div>
             </div>
             <footer class="modal-footer">
               <button class="button" type="button" data-action="close-modal">Cancel</button>
-              <button class="button primary" type="submit">Create action</button>
+              <button class="button primary" type="submit" ${eligibleOwners.length ? "" : "disabled"}>Create action</button>
             </footer>
           </form>
         </section>
@@ -2851,14 +4341,14 @@
             <div>
               <p class="section-kicker">Private company library</p>
               <h2 id="form-upload-title">Upload a company form</h2>
-              <p>Add a PDF, DOCX, or XLSX source. The prototype fingerprints and stores the file locally without putting it in GitHub.</p>
+              <p>Add a PDF, DOCX, or XLSX source for development testing. SafetyOps fingerprints and stages it locally without putting it in GitHub.</p>
             </div>
             <button class="icon-button" type="button" data-action="close-modal" aria-label="Close upload dialog">×</button>
           </header>
           <form id="form-upload-form">
             <div class="modal-body">
               <div class="upload-security-note">
-                <span class="private-source-badge">Local prototype</span>
+                <span class="private-source-badge">Development only</span>
                 <div>
                   <strong>Stored only on this device</strong>
                   <p>Production will upload to a private Supabase bucket after tenant authorization, MIME validation, malware scanning, and SHA-256 verification.</p>
@@ -2916,6 +4406,64 @@
     `;
   }
 
+  function renderLocationModal() {
+    return `
+      <div class="modal-backdrop" data-action="backdrop-close">
+        <section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="location-create-title">
+          <header class="modal-header">
+            <div>
+              <p class="section-kicker">Company workspace · ${data.locations.length} current location${data.locations.length === 1 ? "" : "s"}</p>
+              <h2 id="location-create-title">Add a company location</h2>
+              <p>Create the location and its state-specific regulatory review record in one tenant-scoped transaction.</p>
+            </div>
+            <button class="icon-button" type="button" data-action="close-modal" aria-label="Close location dialog">×</button>
+          </header>
+          <form id="location-create-form">
+            <div class="modal-body">
+              <div class="form-grid">
+                <div class="field">
+                  <label for="location-create-name">Location name</label>
+                  <input id="location-create-name" name="name" minlength="2" maxlength="160" autocomplete="organization" required placeholder="Main facility">
+                </div>
+                <div class="field">
+                  <label for="location-create-code">Location code</label>
+                  <input id="location-create-code" name="code" minlength="2" maxlength="32" pattern="[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*" required placeholder="MAIN">
+                </div>
+                <div class="field full">
+                  <label for="location-create-address">Address or city</label>
+                  <input id="location-create-address" name="address" maxlength="300" autocomplete="street-address" placeholder="Street, city, ZIP">
+                </div>
+                <div class="field">
+                  <label for="location-create-state">State-plan starting point</label>
+                  <select id="location-create-state" name="state_code" required>
+                    <option value="OR">Oregon · Oregon OSHA</option>
+                    <option value="WA">Washington · DOSH</option>
+                    <option value="CA">California · Cal/OSHA</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="location-create-timezone">Timezone</label>
+                  <select id="location-create-timezone" name="timezone" required>
+                    <option value="America/Los_Angeles">Pacific time</option>
+                    <option value="America/Denver">Mountain time</option>
+                  </select>
+                </div>
+              </div>
+              <div class="prototype-note">
+                <strong>Coverage review required</strong>
+                <span>The state creates a candidate jurisdiction only. Employer type, industry, work activity, federal enclaves, tribal coverage, maritime work, and other exceptions must be reviewed before approval.</span>
+              </div>
+            </div>
+            <footer class="modal-footer">
+              <button class="button" type="button" data-action="close-modal">Cancel</button>
+              <button class="button primary" type="submit">Create location</button>
+            </footer>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
   function renderModal() {
     if (!state.modal) return "";
     if (state.modal === "inspection") return renderInspectionModal();
@@ -2923,13 +4471,14 @@
     if (state.modal === "training") return renderTrainingModal();
     if (state.modal === "action") return renderActionModal();
     if (state.modal === "form-upload") return renderFormUploadModal();
+    if (state.modal === "location") return renderLocationModal();
     return "";
   }
 
   function render() {
     localStorage.setItem(`${uiStoragePrefix}view`, state.view === "search" ? "dashboard" : state.view);
     localStorage.setItem(`${uiStoragePrefix}location`, state.locationId);
-    if (supabaseClient && state.authStatus !== "ready") {
+    if (state.authStatus !== "ready") {
       app.innerHTML = renderAuthScreen();
       referencePanelRegion.innerHTML = "";
       return;
@@ -2939,7 +4488,7 @@
         ${renderSidebar()}
         <main class="main">
           ${renderTopbar()}
-          <div class="page">${renderCurrentView()}</div>
+          <div class="page">${renderLocationAccessNotice()}${renderCurrentView()}</div>
         </main>
         ${renderMobileNav()}
       </div>
@@ -2955,6 +4504,10 @@
     if (view === "standards" && state.view === "search" && state.searchQuery) {
       state.standardQuery = state.searchQuery;
       state.standardMode = "all";
+      state.standardAuthority = "combined";
+      state.standardPart = "all";
+      state.standardScope = "all";
+      localStorage.setItem(`${uiStoragePrefix}standardAuthority`, state.standardAuthority);
     }
     state.view = view;
     state.sidebarOpen = false;
@@ -2971,6 +4524,38 @@
   }
 
   function openModal(type, relatedId) {
+    if (type === "form-upload" && !localUploadStagingEnabled) {
+      showToast("Upload service required", "Deploy the private prepare, malware-scan, and commit service before accepting production uploads.");
+      return;
+    }
+    if (["inspection", "incident", "training", "action"].includes(type) && !data.locations.length) {
+      showToast("Location access required", "An active authorized location is required for this workflow.");
+      return;
+    }
+    if (["inspection", "incident"].includes(type) && isReadOnlyAuditor()) {
+      showToast("Read-only auditor role", "Auditors can review authorized records but cannot create operational records.");
+      return;
+    }
+    if (["training", "action"].includes(type) && !canWriteLocation()) {
+      showToast("Manager access required", "Your role cannot create this record for the selected location.");
+      return;
+    }
+    if (type === "location" && !canManageCompany()) {
+      showToast("Company administrator required", "Only corporate administrators and safety managers can create locations.");
+      return;
+    }
+    if (type === "inspection" && !data.inspectionTemplates.some((template) => (
+      template.published && template.currentVersionId && template.questions > 0
+    ))) {
+      showToast("Inspection unavailable", "A published current template version with questions is required.");
+      return;
+    }
+    if (type === "training" && !data.courses.some((course) => (
+      course.published && course.currentVersionId
+    ))) {
+      showToast("Training unavailable", "A published current course version is required.");
+      return;
+    }
     state.modal = type;
     state.selectedTemplateId = relatedId || null;
     state.referenceId = null;
@@ -2998,86 +4583,230 @@
     window.setTimeout(() => toast.remove(), 4200);
   }
 
-  function handleInspectionSubmit(form) {
+  async function handleInspectionSubmit(form) {
+    if (isReadOnlyAuditor()) {
+      showToast("Inspection not submitted", "The auditor role is read-only.");
+      return;
+    }
     const formData = new FormData(form);
-    const locationId = formData.get("location_id");
+    const locationId = String(formData.get("location_id") || "");
+    if (!hasAccessibleLocation(locationId)) {
+      showToast("Inspection not submitted", "Choose an active location assigned to your account.");
+      return;
+    }
     const template = data.inspectionTemplates.find((item) => item.id === formData.get("template_id"));
-    const failed = [...formData.entries()].filter(([key, value]) => key.startsWith("q") && value === "fail").length;
-    data.inspections.unshift({
-      id: `INSP-${1043 + data.inspections.length}`,
-      template: template?.name || "Inspection",
-      locationId,
-      assignee: data.currentUser.name,
-      score: Math.max(0, 100 - failed * 25),
-      status: failed ? "Action needed" : "Complete",
-      due: "Jul 30",
-      findings: failed,
-      regulatorySnapshot: {
-        templateVersion: `1.${((template?.questions || 0) % 5) + 2}`,
-        requirementIds: regulatoryLinksFor("inspection_template", template?.id)
-          .map((link) => link.requirementId),
-        currentThrough: regulatory.meta.currentThrough,
-        sourceStructureSha256: regulatory.meta.structureSha256
+    if (!template?.currentVersionId || !template.published) {
+      showToast("Inspection not submitted", "Publish a current template version before using it.");
+      return;
+    }
+    const questions = inspectionQuestionsFor(template.id);
+    const answers = Object.fromEntries(
+      questions.map((question, index) => [
+        question.key,
+        String(formData.get(`q${index}`) || "")
+      ])
+    );
+    if (Object.values(answers).some((answer) => !["pass", "fail", "na"].includes(answer))) {
+      showToast("Inspection not submitted", "Answer every published question before signing.");
+      return;
+    }
+    const failed = Object.values(answers).filter((answer) => answer === "fail").length;
+    const submitButton = form.querySelector('button[type="submit"]');
+    const clientSubmissionKey = form.dataset.submissionKey
+      || (window.crypto.randomUUID
+        ? window.crypto.randomUUID()
+        : `inspection-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    form.dataset.submissionKey = clientSubmissionKey;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Signing and submitting...";
+    }
+    const result = await supabaseClient.rpc("submit_inspection_with_regulatory_evidence", {
+      target_company_id: data.company.id,
+      target_location_id: locationId,
+      target_template_version_id: template.currentVersionId,
+      target_area_or_asset: String(formData.get("area") || "").trim(),
+      target_answers: answers,
+      target_client_submission_key: clientSubmissionKey,
+      target_notes: String(formData.get("notes") || "").trim() || null
+    });
+    if (result.error) {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Sign & submit";
       }
-    });
-    data.activity.unshift({
-      id: `ev-${Date.now()}`,
-      icon: failed ? "!" : "✓",
-      tone: failed ? "amber" : "green",
-      text: `${data.currentUser.name} submitted ${template?.name || "an inspection"} at ${locationName(locationId)}${failed ? ` with ${failed} finding${failed === 1 ? "" : "s"}` : " with no findings"}.`,
-      time: "Just now"
-    });
-    closeModal();
-    showToast("Inspection submitted", failed ? `${failed} finding${failed === 1 ? "" : "s"} added to the review queue.` : "The signed record is ready for review.");
+      showToast("Inspection not submitted", result.error.message || "Supabase rejected the inspection.");
+      return;
+    }
+    const submissionResult = Array.isArray(result.data) ? result.data[0] : result.data;
+    const evidenceCount = Number(submissionResult?.evidence_count || 0);
+    state.modal = null;
+    state.selectedTemplateId = null;
+    state.view = "inspections";
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast(
+      "Inspection submitted",
+      evidenceCount
+        ? `${failed} finding${failed === 1 ? "" : "s"} and ${evidenceCount} database-verified regulatory evidence link${evidenceCount === 1 ? "" : "s"} were recorded.`
+        : `${failed} finding${failed === 1 ? "" : "s"} recorded with an immutable regulatory context; no mapping is represented as verified evidence until review is complete.`
+    );
   }
 
-  function handleIncidentSubmit(form) {
+  async function handleIncidentSubmit(form) {
+    if (isReadOnlyAuditor()) {
+      showToast("Incident not created", "The auditor role is read-only.");
+      return;
+    }
     const formData = new FormData(form);
-    const nextNumber = String(27 + data.incidents.length).padStart(3, "0");
-    data.incidents.unshift({
-      id: `INC-${nextNumber}`,
-      title: formData.get("title"),
-      type: formData.get("type"),
-      severity: formData.get("severity"),
-      locationId: formData.get("location_id"),
-      reportedBy: data.currentUser.name,
-      date: "Jul 30, 2026",
-      status: "Investigation",
-      daysOpen: 0
+    const locationId = String(formData.get("location_id") || "");
+    if (!hasAccessibleLocation(locationId)) {
+      showToast("Incident not created", "Choose an active location assigned to your account.");
+      return;
+    }
+    const occurredAt = new Date(`${formData.get("date")}T12:00:00`).toISOString();
+    const result = await supabaseClient.from("incidents").insert({
+      company_id: data.company.id,
+      location_id: locationId,
+      title: String(formData.get("title") || "").trim(),
+      incident_type: formData.get("type"),
+      potential_severity: String(formData.get("severity") || "medium").toLowerCase(),
+      occurred_at: occurredAt,
+      description: String(formData.get("description") || "").trim(),
+      reported_by: state.authUser.id
     });
-    closeModal();
+    if (result.error) {
+      showToast("Incident not created", result.error.message || "Supabase rejected the report.");
+      return;
+    }
+    state.modal = null;
     state.view = "incidents";
-    render();
-    showToast("Incident report created", "An investigation task was assigned to the location manager.");
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast("Incident report created", "The report is stored in the private company workspace.");
   }
 
-  function handleTrainingSubmit(form) {
+  async function handleTrainingSubmit(form) {
     const formData = new FormData(form);
     const course = data.courses.find((item) => item.id === formData.get("course_id"));
-    const location = formData.get("location_id") === "all" ? allLocationsLabel(true) : locationName(formData.get("location_id"));
-    closeModal();
-    showToast("Training assigned", `${course?.name || "Course"} was assigned to ${location}.`);
+    if (!course?.published || !course.currentVersionId) {
+      showToast("Training not assigned", "Publish the current course version first.");
+      return;
+    }
+    const requestedLocationId = String(formData.get("location_id") || "all");
+    if (!canWriteLocation(requestedLocationId)) {
+      showToast("Training not assigned", "Your role cannot assign training for that location.");
+      return;
+    }
+    const people = requestedLocationId === "all"
+      ? data.people
+      : data.people.filter((person) => person.locationIds?.includes(requestedLocationId));
+    if (!people.length) {
+      showToast("Training not assigned", "No authorized workers match that location.");
+      return;
+    }
+    const rows = people.map((person) => ({
+      company_id: data.company.id,
+      location_id: requestedLocationId === "all" ? person.locationId : requestedLocationId,
+      course_id: course.id,
+      course_version: course.currentVersion,
+      worker_profile_id: person.id,
+      due_at: new Date(`${formData.get("due_date")}T23:59:59`).toISOString(),
+      assigned_by: state.authUser.id
+    }));
+    const result = await supabaseClient.from("training_assignments").insert(rows);
+    if (result.error) {
+      showToast("Training not assigned", result.error.message || "Supabase rejected the assignments.");
+      return;
+    }
+    state.modal = null;
+    state.view = "training";
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast("Training assigned", `${course.name} was assigned to ${people.length} worker${people.length === 1 ? "" : "s"}.`);
   }
 
-  function handleActionSubmit(form) {
+  async function handleActionSubmit(form) {
     const formData = new FormData(form);
-    data.actions.unshift({
-      id: `ACT-${90 + data.actions.length}`,
-      title: formData.get("title"),
-      source: "Direct",
-      owner: formData.get("owner"),
-      locationId: formData.get("location_id"),
-      due: formData.get("due_date"),
-      priority: formData.get("priority"),
-      status: "Open"
+    const locationId = String(formData.get("location_id") || "");
+    if (!canWriteLocation(locationId)) {
+      showToast("Action not created", "Your role cannot create a corrective action for that location.");
+      return;
+    }
+    const ownerId = String(formData.get("owner_id") || "");
+    const eligibleOwner = data.people.find((person) => (
+      person.id === ownerId && person.locationIds?.includes(locationId)
+    ));
+    if (!eligibleOwner) {
+      showToast("Action not created", "Choose an owner who is assigned to that location.");
+      return;
+    }
+    const result = await supabaseClient.from("corrective_actions").insert({
+      company_id: data.company.id,
+      location_id: locationId,
+      source_type: "direct",
+      title: String(formData.get("title") || "").trim(),
+      priority: String(formData.get("priority") || "medium").toLowerCase(),
+      assigned_to: ownerId,
+      due_at: new Date(`${formData.get("due_date")}T23:59:59`).toISOString(),
+      required_evidence: formData.get("evidence"),
+      created_by: state.authUser.id
     });
-    closeModal();
+    if (result.error) {
+      showToast("Action not created", result.error.message || "Supabase rejected the corrective action.");
+      return;
+    }
+    state.modal = null;
     state.view = "actions";
-    render();
-    showToast("Corrective action created", "The owner will see it in their work queue.");
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast("Corrective action created", "The owner will see the private Supabase record in their work queue.");
+  }
+
+  async function handleDocumentAcknowledgement(documentId) {
+    if (isReadOnlyAuditor()) {
+      showToast("Acknowledgement unavailable", "The auditor role is read-only.");
+      return;
+    }
+    const documentRecord = data.documents.find((item) => item.id === documentId);
+    if (
+      !documentRecord?.acknowledgementRequired
+      || !documentRecord.currentVersionId
+      || !documentRecord.versionPublished
+    ) {
+      showToast("Acknowledgement unavailable", "A published current document version is required.");
+      return;
+    }
+    if (documentRecord.acknowledgement === 100) {
+      showToast("Already acknowledged", `${documentRecord.name} is already acknowledged for this version.`);
+      return;
+    }
+    const acknowledgedAt = new Date().toISOString();
+    const result = await supabaseClient.from("document_acknowledgements").insert({
+      company_id: data.company.id,
+      document_id: documentRecord.id,
+      document_version_id: documentRecord.currentVersionId,
+      user_id: state.authUser.id,
+      acknowledged_at: acknowledgedAt,
+      acknowledgement_record: {
+        documentVersion: documentRecord.versionNumber,
+        documentVersionChecksumSha256: documentRecord.versionChecksumSha256,
+        acknowledgedBy: state.authUser.id,
+        acknowledgedAt
+      }
+    });
+    if (result.error) {
+      showToast("Acknowledgement not recorded", result.error.message || "Supabase rejected the acknowledgement.");
+      return;
+    }
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast("Acknowledgement recorded", "Supabase stored the user, exact document version, checksum reference, and timestamp.");
   }
 
   async function handleFormUploadSubmit(form) {
+    if (!localUploadStagingEnabled) {
+      showToast(
+        "Upload service required",
+        "Deploy the private prepare, malware-scan, and commit workflow before adding company originals."
+      );
+      return;
+    }
     const formData = new FormData(form);
     const file = formData.get("file");
     const submitButton = form.querySelector('button[type="submit"]');
@@ -3158,8 +4887,7 @@
     try {
       const record = await getLocalFormUpload(id);
       const ownerId = localFormUploadOwnerId();
-      const correctOwner = record?.userId === ownerId
-        || (ownerId === "demo-user" && !record?.userId);
+      const correctOwner = record?.userId === ownerId;
       if (
         !record
         || record.companyId !== data.company.id
@@ -3182,76 +4910,250 @@
     }
   }
 
-  function saveProgramFormRecord(form, status) {
-    const template = allFormTemplates().find((item) => item.id === form.dataset.formId);
-    if (!template) return;
-    const formData = new FormData(form);
-    const answers = {};
-
-    template.fields.forEach((field) => {
-      if (field.type === "file") {
-        const input = form.elements.namedItem(field.id);
-        answers[field.id] = Array.from(input?.files || []).map((file) => ({
-          name: file.name,
-          size: file.size,
-          type: file.type
-        }));
-        return;
+  async function requestOriginalFormDownload(formId) {
+    const template = allFormTemplates().find((item) => item.id === formId);
+    const formFileId = template?.originalFile?.id;
+    if (!formFileId) {
+      showToast("Original unavailable", "No controlled original is linked to this template version.");
+      return;
+    }
+    try {
+      const metadataResult = await supabaseClient.rpc("get_safety_program_form_file_metadata", {
+        target_form_file_id: formFileId
+      });
+      if (metadataResult.error) throw metadataResult.error;
+      const metadata = Array.isArray(metadataResult.data)
+        ? metadataResult.data[0]
+        : metadataResult.data;
+      if (!metadata) throw new Error("Access to this original was not authorized.");
+      if (!supabaseClient.functions?.invoke) {
+        throw new Error("The short-lived download service is not deployed yet.");
       }
-      answers[field.id] = formData.getAll(field.id).map((value) => String(value));
-      if (answers[field.id].length === 1) answers[field.id] = answers[field.id][0];
-    });
-
-    const records = storedProgramRecords("formSubmissions");
-    const timestamp = new Date().toISOString();
-    records.unshift({
-      id: `SUB-${Date.now()}`,
-      organizationId: data.company.id,
-      formId: template.id,
-      formTitle: template.title,
-      sourceSystem: template.sourceSystem,
-      sourceId: template.sourceId,
-      sourceCapturedOn: template.sourceCapturedOn,
-      templateVersion: template.version,
-      citations: template.citations || [],
-      submittedBy: data.currentUser.name,
-      submittedAt: timestamp,
-      status,
-      locationId: answers.location || null,
-      answers
-    });
-    localStorage.setItem("safetyops.formSubmissions", JSON.stringify(records.slice(0, 100)));
-    state.activeFormId = null;
-    state.programCategory = "forms";
-    state.formLibraryMode = "templates";
-    localStorage.setItem(`${uiStoragePrefix}formsMode`, state.formLibraryMode);
-    state.view = "programs";
-    render();
-    showToast(
-      status === "Submitted" ? "Digital form submitted" : "Draft saved",
-      `${template.title} was saved with its source version, signer, timestamp, and regulatory trace snapshot.`
-    );
+      const signedResult = await supabaseClient.functions.invoke("sign-form-file", {
+        body: { form_file_id: formFileId }
+      });
+      if (signedResult.error) throw signedResult.error;
+      const signedUrl = signedResult.data?.signed_url;
+      const parsedUrl = new URL(signedUrl);
+      if (parsedUrl.protocol !== "https:") throw new Error("The download service returned an invalid URL.");
+      const link = document.createElement("a");
+      link.href = parsedUrl.href;
+      link.download = metadata.filename || "company-form";
+      link.rel = "noopener noreferrer";
+      link.hidden = true;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      showToast("Secure download issued", `${metadata.filename} is available through a short-lived authorized URL.`);
+    } catch (error) {
+      showToast("Secure download unavailable", error?.message || "The original could not be authorized.");
+    }
   }
 
-  function recordProgramAssignment(programId) {
-    const item = programLibraryItems().find((record) => record.id === programId);
-    if (!item) return;
-    const assignments = storedProgramRecords("programAssignments");
-    assignments.unshift({
-      id: `ASN-${Date.now()}`,
-      programId: item.id,
-      title: item.title,
-      sourceId: item.sourceId,
-      sourceCapturedOn: item.sourceCapturedOn,
-      assignedBy: data.currentUser.name,
-      assignedAt: new Date().toISOString(),
-      locationId: state.locationId,
-      status: "Open"
+  function formAnswerValues(form, template) {
+    const formData = new FormData(form);
+    const answers = {};
+    template.fields.forEach((field) => {
+      if (field.type === "instruction") return;
+      if (field.type === "file") {
+        const input = form.elements.namedItem(field.id);
+        answers[field.id] = Array.from(input?.files || []);
+        return;
+      }
+      const values = formData.getAll(field.id).map((value) => String(value));
+      answers[field.id] = values.length === 1 ? values[0] : values;
     });
-    localStorage.setItem("safetyops.programAssignments", JSON.stringify(assignments.slice(0, 100)));
+    return answers;
+  }
+
+  function typedProgramAnswerRow(field, rawValue, submissionId, template) {
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+    const hasValue = values.some((value) => String(value ?? "").trim() !== "");
+    if (!hasValue || ["instruction", "signature", "acknowledgement", "file"].includes(field.type)) {
+      return null;
+    }
+    const row = {
+      company_id: data.company.id,
+      form_template_version_id: template.formTemplateVersionId,
+      submission_id: submissionId,
+      field_id: field.databaseId,
+      field_snapshot: {},
+      answered_by: state.authUser.id
+    };
+    if (["text", "textarea", "employee", "location", "select"].includes(field.type)) {
+      row.value_text = String(values[0]);
+    } else if (field.type === "number") {
+      row.value_number = Number(values[0]);
+    } else if (field.type === "yesno") {
+      row.value_boolean = String(values[0]).toLowerCase() === "yes";
+    } else if (field.type === "date") {
+      row.value_date = String(values[0]);
+    } else if (field.type === "time") {
+      row.value_time = String(values[0]);
+    } else if (field.type === "datetime-local") {
+      row.value_timestamptz = new Date(String(values[0])).toISOString();
+    } else if (field.type === "multiselect") {
+      row.value_json = values;
+    } else {
+      row.value_text = String(values[0]);
+    }
+    return row;
+  }
+
+  async function saveProgramFormRecord(form, status) {
+    const template = allFormTemplates().find((item) => item.id === form.dataset.formId);
+    if (!formAvailableForSubmission(template)) {
+      showToast("Form unavailable", "This form needs a published schema and reviewed location applicability before it can be used.");
+      return;
+    }
+    const submitButton = form.querySelector('button[type="submit"]');
+    const draftButton = form.querySelector('[data-action="save-program-form-draft"]');
+    if (submitButton) submitButton.disabled = true;
+    if (draftButton) draftButton.disabled = true;
+    try {
+      const answers = formAnswerValues(form, template);
+      const hasFiles = template.fields.some((field) =>
+        field.type === "file" && (answers[field.id] || []).length
+      );
+      if (hasFiles) {
+        throw new Error("Answer attachments require the private scan-and-commit service, which is not deployed yet.");
+      }
+      const locationField = template.fields.find((field) => field.type === "location");
+      const requestedLocationId = locationField
+        ? String(answers[locationField.id] || "")
+        : state.locationId !== "all"
+          ? state.locationId
+          : template.locations[0];
+      if (!template.locations.includes(requestedLocationId)) {
+        throw new Error("Choose a location with reviewed applicability for this program version.");
+      }
+      const matchingAssignment = (data.programAssignments || []).find((assignment) => (
+        assignment.formTemplateVersionId === template.formTemplateVersionId
+        && assignment.locationId === requestedLocationId
+        && assignment.assigneeUserId === state.authUser.id
+        && !["Completed", "Waived", "Cancelled"].includes(assignment.status)
+      ));
+      const clientKey = window.crypto.randomUUID
+        ? window.crypto.randomUUID()
+        : `submission-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const draftResult = await supabaseClient
+        .from("safety_program_form_submissions")
+        .insert({
+          company_id: data.company.id,
+          program_version_id: template.programVersionId,
+          location_id: requestedLocationId,
+          form_template_version_id: template.formTemplateVersionId,
+          assignment_id: matchingAssignment?.id || null,
+          submitted_by: state.authUser.id,
+          status: "draft",
+          client_submission_key: clientKey,
+          form_schema_sha256: template.schemaSha256
+        })
+        .select("id")
+        .single();
+      if (draftResult.error) throw draftResult.error;
+
+      const answerRows = template.fields
+        .map((field) => typedProgramAnswerRow(
+          field,
+          answers[field.id],
+          draftResult.data.id,
+          template
+        ))
+        .filter(Boolean);
+      if (answerRows.length) {
+        const answerResult = await supabaseClient
+          .from("safety_program_form_answers")
+          .insert(answerRows);
+        if (answerResult.error) throw answerResult.error;
+      }
+
+      if (status === "Submitted") {
+        const signatureFields = template.fields.filter((field) =>
+          ["signature", "acknowledgement"].includes(field.type)
+        );
+        const signatureRows = [];
+        for (const field of signatureFields) {
+          const rawValue = answers[field.id];
+          const hasIntent = Array.isArray(rawValue) ? rawValue.length > 0 : Boolean(rawValue);
+          if (!hasIntent) continue;
+          signatureRows.push({
+            company_id: data.company.id,
+            form_template_version_id: template.formTemplateVersionId,
+            submission_id: draftResult.data.id,
+            field_id: field.databaseId,
+            signer_user_id: state.authUser.id
+          });
+        }
+        if (signatureRows.length) {
+          const signatureResult = await supabaseClient
+            .from("safety_program_form_signatures")
+            .insert(signatureRows);
+          if (signatureResult.error) throw signatureResult.error;
+        }
+        const submitResult = await supabaseClient.rpc("submit_safety_program_form", {
+          target_submission_id: draftResult.data.id
+        });
+        if (submitResult.error) throw submitResult.error;
+      }
+
+      state.activeFormId = null;
+      state.programCategory = "forms";
+      state.formLibraryMode = "templates";
+      localStorage.setItem(`${uiStoragePrefix}formsMode`, state.formLibraryMode);
+      state.view = "programs";
+      await loadAuthenticatedWorkspace(state.authUser);
+      showToast(
+        status === "Submitted" ? "Digital form submitted" : "Draft saved",
+        `${template.title} is stored in Supabase with its pinned program, schema, location, and regulatory context.`
+      );
+    } catch (error) {
+      if (submitButton) submitButton.disabled = false;
+      if (draftButton) draftButton.disabled = false;
+      showToast("Form was not saved", error?.message || "Supabase rejected the form record.");
+    }
+  }
+
+  async function recordProgramAssignment(programId) {
+    const item = (programLibrary.programs || []).find((record) => record.id === programId);
+    if (!item?.programVersionId || item.programStatus !== "published") {
+      showToast("Assignment unavailable", "Publish the controlled program version before assigning it.");
+      return;
+    }
+    if (!canWriteLocation()) {
+      showToast("Assignment unavailable", "Your role cannot assign safety programs for the selected location.");
+      return;
+    }
+    const locationIds = (state.locationId === "all"
+      ? item.locations || []
+      : (item.locations || []).filter((locationId) => locationId === state.locationId))
+      .filter((locationId) => canWriteLocation(locationId));
+    if (!locationIds.length) {
+      showToast("Assignment unavailable", "Select a location where this program has reviewed applicability.");
+      return;
+    }
+    const dueAt = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    const rows = locationIds.map((locationId) => ({
+      company_id: data.company.id,
+      program_version_id: item.programVersionId,
+      location_id: locationId,
+      assignee_user_id: state.authUser.id,
+      assignment_type: "read_and_acknowledge",
+      title: `Acknowledge ${item.title}`,
+      instructions: "Read the published program and complete the acknowledgement.",
+      status: "assigned",
+      due_at: dueAt,
+      assigned_by: state.authUser.id
+    }));
+    const result = await supabaseClient.from("safety_program_assignments").insert(rows);
+    if (result.error) {
+      showToast("Assignment not created", result.error.message || "Supabase rejected the assignment.");
+      return;
+    }
+    await loadAuthenticatedWorkspace(state.authUser);
     showToast(
       "Acknowledgement assigned",
-      `${item.title} was assigned to ${state.locationId === "all" ? allLocationsLabel(true) : locationName(state.locationId)} with the source version frozen.`
+      `${item.title} was assigned to you at ${locationIds.length} applicable location${locationIds.length === 1 ? "" : "s"}.`
     );
   }
 
@@ -3312,6 +5214,18 @@
       return;
     }
 
+    if (action === "standards-authority") {
+      const authority = target.dataset.authority;
+      state.standardAuthority = ["location", "federal", "combined"].includes(authority)
+        ? authority
+        : "location";
+      state.standardPart = "all";
+      state.standardScope = "all";
+      localStorage.setItem(`${uiStoragePrefix}standardAuthority`, state.standardAuthority);
+      render();
+      return;
+    }
+
     if (action === "program-category") {
       state.programCategory = target.dataset.category || "programs";
       render();
@@ -3319,7 +5233,11 @@
     }
 
     if (action === "form-library-mode") {
-      const allowedModes = new Set(["originals", "uploads", "templates"]);
+      const allowedModes = new Set([
+        "originals",
+        "templates",
+        ...(localUploadStagingEnabled ? ["uploads"] : [])
+      ]);
       state.formLibraryMode = allowedModes.has(target.dataset.mode) ? target.dataset.mode : "originals";
       localStorage.setItem(`${uiStoragePrefix}formsMode`, state.formLibraryMode);
       render();
@@ -3332,6 +5250,11 @@
       state.activeFormId = null;
       render();
       requestAnimationFrame(() => document.querySelector(".pdf-preview-modal .icon-button")?.focus());
+      return;
+    }
+
+    if (action === "download-form-original") {
+      requestOriginalFormDownload(target.dataset.formId);
       return;
     }
 
@@ -3380,6 +5303,16 @@
     }
 
     if (action === "start-program-form") {
+      const template = allFormTemplates().find((item) => item.id === target.dataset.formId);
+      if (!formAvailableForSubmission(template)) {
+        showToast(
+          isReadOnlyAuditor() ? "Read-only auditor role" : "Form unavailable",
+          isReadOnlyAuditor()
+            ? "Auditors can review authorized records but cannot create or sign form submissions."
+            : "This form requires a published schema and reviewed, effective location applicability."
+        );
+        return;
+      }
       state.activeFormId = target.dataset.formId;
       state.programDrawerId = null;
       state.originalPreviewId = null;
@@ -3446,7 +5379,7 @@
     }
 
     if (action === "prototype-action") {
-      showToast("Prototype preview", target.dataset.message || "This workflow is planned for the next iteration.");
+      showToast("Workflow not enabled", target.dataset.message || "This workflow still requires its server-side authority.");
       return;
     }
 
@@ -3457,13 +5390,16 @@
     }
 
     if (action === "acknowledge-document") {
-      const record = data.documents.find((item) => item.id === target.dataset.documentId);
-      if (record) {
-        record.acknowledgement = Math.min(100, record.acknowledgement + 1);
-        if (record.acknowledgement === 100) record.status = "Current";
-      }
+      handleDocumentAcknowledgement(target.dataset.documentId);
+      return;
+    }
+
+    if (action === "retry-workspace" && state.authUser) {
+      state.authStatus = "loading";
+      state.authMessage = "";
       render();
-      showToast("Acknowledgement recorded", "The audit event includes the user, version, and timestamp.");
+      loadAuthenticatedWorkspace(state.authUser);
+      return;
     }
   });
 
@@ -3476,8 +5412,27 @@
       }
       return;
     }
+    if (event.target.id === "action-location") {
+      const eligibleOwners = data.people.filter((person) =>
+        person.locationIds?.includes(event.target.value)
+      );
+      const ownerSelect = document.querySelector("#action-owner");
+      const submitButton = document.querySelector("#action-form button[type='submit']");
+      if (ownerSelect) {
+        ownerSelect.innerHTML = eligibleOwners.length
+          ? eligibleOwners.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name)}</option>`).join("")
+          : `<option value="">No authorized owner at this location</option>`;
+        ownerSelect.disabled = !eligibleOwners.length;
+      }
+      if (submitButton) submitButton.disabled = !eligibleOwners.length;
+      return;
+    }
     if (event.target.id === "location-select") {
       state.locationId = event.target.value;
+      if (state.view === "standards") {
+        state.standardPart = "all";
+        state.standardScope = "all";
+      }
       render();
       return;
     }
@@ -3502,6 +5457,12 @@
     if (event.target.id === "company-onboarding-form") {
       event.preventDefault();
       handleCompanyOnboarding(event.target);
+      return;
+    }
+
+    if (event.target.id === "location-create-form") {
+      event.preventDefault();
+      handleLocationCreate(event.target);
       return;
     }
 
@@ -3600,7 +5561,7 @@
   render();
   if (supabaseClient) {
     initializeAuth();
-  } else {
+  } else if (localUploadStagingEnabled) {
     hydrateLocalFormUploads();
   }
 })();

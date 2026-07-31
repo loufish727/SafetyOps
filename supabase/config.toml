@@ -1,0 +1,4 @@
+project_id = "safetyops"
+
+[functions.sign-form-file]
+verify_jwt = true

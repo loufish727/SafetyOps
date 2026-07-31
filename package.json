@@ -1,18 +1,24 @@
 {
-  "name": "safetyops-prototype",
+  "name": "lfes-safetyops",
   "version": "0.1.0",
   "private": true,
-  "description": "Multi-location workplace safety management prototype",
+  "description": "LFES-aligned multi-location workplace safety operations application foundation",
   "scripts": {
     "dev": "http-server . -a 127.0.0.1 -p 4173 -c-1",
     "build": "node scripts/build-static.js",
     "sync:osha": "node scripts/sync-osha-reference.mjs",
     "test": "playwright test",
     "test:public-boundary": "node scripts/verify-public-build.mjs",
+    "generate:public-attestation-key": "node scripts/generate-public-attestation-key.mjs",
+    "attest:public-boundary": "node scripts/verify-public-build.mjs --write-attestation",
+    "test:public-boundary:ci": "node scripts/verify-public-build.mjs --verify-attestation",
     "test:smoke": "playwright test tests/smoke.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "1.60.0",
     "http-server": "14.1.1"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.57.4"
   }
 }
