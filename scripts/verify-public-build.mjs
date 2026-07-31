@@ -67,6 +67,43 @@ const excludedLocalReleaseFiles = new Set([
   "debug.log",
   "supabase-config.local.js"
 ]);
+const forbiddenPrivateArtifactExtensions = new Set([
+  ".dng",
+  ".doc",
+  ".docx",
+  ".jpeg",
+  ".jpg",
+  ".pdf",
+  ".png",
+  ".ppt",
+  ".pptx",
+  ".tif",
+  ".tiff",
+  ".xls",
+  ".xlsx",
+  ".zip"
+]);
+const forbiddenPrivateArtifactSignatures = [
+  { label: "PDF document", bytes: Buffer.from("%PDF-", "ascii") },
+  { label: "ZIP or OOXML archive", bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04]) },
+  { label: "legacy Office document", bytes: Buffer.from([0xd0, 0xcf, 0x11, 0xe0]) },
+  { label: "JPEG image", bytes: Buffer.from([0xff, 0xd8, 0xff]) },
+  { label: "PNG image", bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) },
+  { label: "little-endian TIFF/DNG image", bytes: Buffer.from([0x49, 0x49, 0x2a, 0x00]) },
+  { label: "big-endian TIFF/DNG image", bytes: Buffer.from([0x4d, 0x4d, 0x00, 0x2a]) }
+];
+
+function forbiddenPrivateArtifactExtension(relativePath) {
+  return forbiddenPrivateArtifactExtensions.has(
+    path.posix.extname(relativePath.replaceAll("\\", "/")).toLowerCase()
+  );
+}
+
+function forbiddenPrivateArtifactSignature(content) {
+  return forbiddenPrivateArtifactSignatures.find(({ bytes }) => (
+    content.length >= bytes.length && content.subarray(0, bytes.length).equals(bytes)
+  ));
+}
 
 function trackedSensitivePathLabel(relativePath) {
   const normalizedPath = relativePath.replaceAll("\\", "/");
@@ -90,6 +127,9 @@ function trackedSensitivePathLabel(relativePath) {
   if (filename === "debug.log") return "[tracked-debug-log]";
   if (filename === "supabase-config.local.js") {
     return "[tracked-local-config]";
+  }
+  if (forbiddenPrivateArtifactExtension(normalizedPath)) {
+    return "[tracked-private-document-or-image]";
   }
   return null;
 }
@@ -650,10 +690,29 @@ async function main() {
     }
     const content = await readFile(file);
     scannedBytes += content.byteLength;
+    const signature = forbiddenPrivateArtifactSignature(content);
+    if (forbiddenPrivateArtifactExtension(relativeBuildPath) || signature) {
+      violations.push({
+        file: displayPath(file),
+        reason: signature
+          ? `${signature.label} bytes are forbidden in the public build`
+          : "private document/archive/image extension is forbidden in the public build"
+      });
+    }
     inspectText(file, content.toString("utf8"), violations);
   }
   for (const file of releaseTreeFiles) {
     const content = await readFile(file);
+    const relativePath = displayPath(file);
+    const signature = forbiddenPrivateArtifactSignature(content);
+    if (forbiddenPrivateArtifactExtension(relativePath) || signature) {
+      violations.push({
+        file: relativePath,
+        reason: signature
+          ? `${signature.label} bytes are forbidden in the public release tree`
+          : "private document/archive/image extension is forbidden in the public release tree"
+      });
+    }
     inspectText(file, content.toString("utf8"), violations);
   }
   for (const expectedFile of allowedPublicFiles) {

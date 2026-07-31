@@ -231,6 +231,7 @@ function seedTables() {
     safety_program_form_signatures: [],
     safety_program_regulatory_links: [],
     safety_program_form_template_files: [],
+    safety_program_import_candidates: [],
     regulatory_jurisdictions: WORKSPACE_FIXTURE.locations.map((location) => ({
       code: location.jurisdiction,
       subdivision_code: location.stateCode,
@@ -256,6 +257,125 @@ function fakeSupabaseScript(options = {}) {
     tables.location_regulatory_profiles = [];
     tables.company_memberships[0].default_location_id = null;
     tables.company_memberships[0].location_memberships = [];
+  }
+  if (options.importCandidates) {
+    const candidateBase = {
+      company_id: WORKSPACE_FIXTURE.company.id,
+      folder_hint: "Synthetic source / Operations",
+      review_status: "pending_review",
+      language: "en",
+      proposed_location_codes: ["LOC-01"],
+      page_count: null,
+      render_verified: false,
+      created_at: "2026-07-30T17:00:00.000Z",
+      provider_file_id: "drive-provider-secret-must-not-render",
+      storage_object_path: "private-object-path-must-not-render"
+    };
+    tables.safety_program_import_candidates = [
+      {
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000001",
+        display_name: "Hazard Assessment Checklist.pdf",
+        candidate_kind: "form_template",
+        classification: "internal",
+        proposed_location_codes: ["LOC-01", "LOC-02"],
+        page_count: 12,
+        render_verified: true,
+        mime_type: "application/pdf",
+        size_bytes: 348160,
+        content_sha256: "1".repeat(64),
+        source_path_sha256: "a".repeat(64)
+      },
+      {
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000002",
+        display_name: "Signed JHA - July.pdf",
+        candidate_kind: "completed_record",
+        classification: "restricted",
+        review_status: "reviewed",
+        page_count: 4,
+        render_verified: true,
+        mime_type: "application/pdf",
+        size_bytes: 122880,
+        content_sha256: "2".repeat(64),
+        source_path_sha256: "b".repeat(64)
+      },
+      {
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000003",
+        display_name: "Hearing Conservation Program.docx",
+        candidate_kind: "program_document",
+        classification: "internal",
+        mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size_bytes: 225280,
+        content_sha256: "3".repeat(64),
+        source_path_sha256: "c".repeat(64)
+      },
+      {
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000004",
+        display_name: "Forklift Operator Training.pptx",
+        candidate_kind: "training_material",
+        classification: "internal",
+        mime_type: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        size_bytes: 532480,
+        content_sha256: "4".repeat(64),
+        source_path_sha256: "d".repeat(64)
+      },
+      {
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000005",
+        display_name: "Oregon OSHA Quick Reference.pdf",
+        candidate_kind: "reference",
+        classification: "internal",
+        page_count: 8,
+        render_verified: true,
+        mime_type: "application/pdf",
+        size_bytes: 184320,
+        content_sha256: "5".repeat(64),
+        source_path_sha256: "e".repeat(64)
+      },
+      {
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000006",
+        display_name: "Guarding Evidence Photo.jpg",
+        candidate_kind: "evidence",
+        classification: "internal",
+        mime_type: "image/jpeg",
+        size_bytes: 94208,
+        content_sha256: "6".repeat(64),
+        source_path_sha256: "f".repeat(64)
+      },
+      {
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000007",
+        display_name: "Unsorted Scan.pdf",
+        candidate_kind: "unknown",
+        classification: "internal",
+        language: "en",
+        proposed_location_codes: [],
+        page_count: 2,
+        render_verified: true,
+        mime_type: "application/pdf",
+        size_bytes: 71680,
+        content_sha256: "7".repeat(64),
+        source_path_sha256: "0".repeat(64)
+      }
+    ];
+    if (options.mislabeledCandidate) {
+      tables.safety_program_import_candidates.push({
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000008",
+        display_name: "Mislabeled Photo.pdf",
+        candidate_kind: "evidence",
+        classification: "internal",
+        proposed_location_codes: [],
+        mime_type: "image/jpeg",
+        size_bytes: 8192,
+        content_sha256: "8".repeat(64),
+        source_path_sha256: "8".repeat(64)
+      });
+    }
   }
   if (options.programFixture && tables.locations.length) {
     const program = WORKSPACE_FIXTURE.program;
@@ -423,6 +543,7 @@ function fakeSupabaseScript(options = {}) {
       var tables = seed.tables;
       var calls = [];
       var incidentSequence = 1000;
+      var archiveQueryError = ${options.archiveQueryError ? "true" : "false"};
 
       function clone(value) {
         return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -589,6 +710,12 @@ function fakeSupabaseScript(options = {}) {
             return insertRows(tableName, input);
           },
           then: function (resolve, reject) {
+            if (archiveQueryError && tableName === "safety_program_import_candidates") {
+              return Promise.resolve({
+                data: null,
+                error: { message: "Temporary archive query failure." }
+              }).then(resolve, reject);
+            }
             return Promise.resolve({
               data: executeQuery(tableName, filters, ordering, maximum),
               error: null
@@ -688,6 +815,34 @@ function fakeSupabaseScript(options = {}) {
             return Promise.resolve({ data: clone(submission || null), error: null });
           }
           return Promise.resolve({ data: null, error: null });
+        },
+        functions: {
+          invoke: function (name, invokeOptions) {
+            calls.push({ method: "function", name: name, options: clone(invokeOptions) });
+            if (name === "sign-form-file" && invokeOptions?.body?.candidate_id) {
+              var candidate = (tables.safety_program_import_candidates || []).find(function (row) {
+                return row.id === invokeOptions.body.candidate_id;
+              });
+              var responseMetadata = candidate ? {
+                signed_url: "https://safetyops-test.supabase.co/storage/v1/object/sign/safety-program-private/authorized-original",
+                expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+                filename: candidate.display_name,
+                mime_type: candidate.mime_type,
+                size_bytes: candidate.size_bytes,
+                content_sha256: candidate.content_sha256,
+                page_count: candidate.page_count,
+                render_verified: candidate.render_verified
+              } : null;
+              if (${options.functionCandidateMetadataMismatch ? "true" : "false"} && responseMetadata) {
+                responseMetadata.content_sha256 = "9".repeat(64);
+              }
+              return Promise.resolve({
+                data: responseMetadata,
+                error: responseMetadata ? null : { message: "Candidate not found." }
+              });
+            }
+            return Promise.resolve({ data: null, error: { message: "Function fixture rejected the request." } });
+          }
         }
       };
 

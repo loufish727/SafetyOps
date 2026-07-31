@@ -3,6 +3,18 @@ const { configureAuthenticatedWorkspace } = require("./helpers/authenticated-wor
 
 test.beforeEach(async ({ page }, testInfo) => {
   await configureAuthenticatedWorkspace(page, {
+    importCandidates: true,
+    mislabeledCandidate:
+      testInfo.title === "Drive archive never certifies a PDF from its filename alone",
+    functionCandidateMetadataMismatch:
+      testInfo.title === "Drive archive rejects mismatched download metadata",
+    archiveQueryError:
+      testInfo.title === "Drive archive query failure does not break the workspace",
+    role: testInfo.title === "Drive archive review is hidden from non-manager roles"
+      ? "worker"
+      : testInfo.title === "Drive archive review is available to safety managers"
+        ? "safety_manager"
+        : undefined,
     programFixture:
       testInfo.title === "a program form submits without caller-authored evidence hashes"
   });
@@ -171,6 +183,135 @@ test("a company form upload is fingerprinted, persisted, and downloadable", asyn
   await card.getByRole("button", { name: "Download copy" }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("weekly-safety-check.pdf");
+});
+
+test("Drive archive review shows full original trace and classification filters", async ({ page }, testInfo) => {
+  await openProgramLibrary(page, testInfo.project.name);
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+  await page.getByRole("tab", { name: /Drive archive review/ }).click();
+
+  await expect(page.getByRole("heading", { level: 2, name: "Drive archive review" })).toBeVisible();
+  await expect(page.getByText("7 source items · 4 verified original PDFs · 26 verified PDF pages", { exact: true })).toBeVisible();
+  await expect(page.locator(".import-candidate-card")).toHaveCount(7);
+
+  const reusableForm = page.locator(".import-candidate-card.kind-form").filter({
+    hasText: "Hazard Assessment Checklist.pdf"
+  });
+  await expect(reusableForm.getByText("Reusable form candidate", { exact: true })).toBeVisible();
+  await expect(reusableForm.getByText("Verified original PDF · 12 pages", { exact: true })).toBeVisible();
+  await expect(reusableForm.getByText("Synthetic source / Operations", { exact: true })).toBeVisible();
+  await expect(reusableForm.getByText("application/pdf", { exact: true })).toBeVisible();
+  await expect(reusableForm.getByText("340 KB", { exact: true })).toBeVisible();
+  await expect(reusableForm.getByText("LOC-01, LOC-02", { exact: true })).toBeVisible();
+  await expect(reusableForm).toContainText("1".repeat(64));
+  await expect(reusableForm.getByText("Internal", { exact: true })).toBeVisible();
+
+  const completedRecord = page.locator(".import-candidate-card.kind-record");
+  const evidence = page.locator(".import-candidate-card.kind-evidence");
+  await expect(completedRecord.getByText("Completed record", { exact: true })).toBeVisible();
+  await expect(completedRecord.getByText("Restricted", { exact: true })).toBeVisible();
+  await expect(completedRecord).toContainText("Reconfirm business need before downloading");
+  await expect(evidence.getByText("Safety evidence", { exact: true })).toBeVisible();
+  await expect(page.locator(".import-archive-review")).not.toContainText(/cover|preview/i);
+  await expect(page.locator("body")).not.toContainText("drive-provider-secret-must-not-render");
+  await expect(page.locator("body")).not.toContainText("private-object-path-must-not-render");
+
+  await page.getByRole("button", { name: /^Completed records 1$/ }).click();
+  await expect(page.locator(".import-candidate-card")).toHaveCount(1);
+  await expect(completedRecord).toBeVisible();
+
+  await page.getByRole("button", { name: /^All items 7$/ }).click();
+  await page.getByLabel("Review status").selectOption("reviewed");
+  await expect(page.locator(".import-candidate-card")).toHaveCount(1);
+  await expect(completedRecord).toBeVisible();
+
+  await page.getByLabel("Review status").selectOption("all");
+  await page.getByLabel("Search Drive archive").fill("Oregon OSHA");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.locator(".import-candidate-card")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Oregon OSHA Quick Reference.pdf" })).toBeVisible();
+});
+
+test("Drive archive secure download authorizes by candidate id", async ({ page }, testInfo) => {
+  await page.route("https://safetyops-test.supabase.co/storage/v1/object/sign/**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/pdf",
+    headers: { "Content-Disposition": 'attachment; filename="Hazard Assessment Checklist.pdf"' },
+    body: "%PDF-1.7\n%%EOF\n"
+  }));
+  await openProgramLibrary(page, testInfo.project.name);
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+  await page.getByRole("tab", { name: /Drive archive review/ }).click();
+
+  const card = page.locator(".import-candidate-card").filter({
+    hasText: "Hazard Assessment Checklist.pdf"
+  });
+  const downloadPromise = page.waitForEvent("download");
+  await card.getByRole("button", { name: "Secure original download" }).click();
+  await downloadPromise;
+  await expect(page.getByText("Secure original issued", { exact: true })).toBeVisible();
+
+  const functionCall = await page.evaluate(() => window.__safetyOpsFakeDb.calls.find((call) => (
+    call.method === "function" && call.name === "sign-form-file"
+  )));
+  expect(functionCall.options).toEqual({
+    body: { candidate_id: "70000000-0000-4000-8000-000000000001" }
+  });
+});
+
+test("Drive archive never certifies a PDF from its filename alone", async ({ page }, testInfo) => {
+  await openProgramLibrary(page, testInfo.project.name);
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+  await page.getByRole("tab", { name: /Drive archive review/ }).click();
+
+  await expect(page.getByText("8 source items · 4 verified original PDFs · 26 verified PDF pages", { exact: true })).toBeVisible();
+  const mislabeled = page.locator(".import-candidate-card").filter({ hasText: "Mislabeled Photo.pdf" });
+  await expect(mislabeled.getByText("Verified original JPEG · SHA-256 matched", { exact: true })).toBeVisible();
+  await expect(mislabeled).not.toContainText("Verified original PDF");
+});
+
+test("Drive archive rejects mismatched download metadata", async ({ page }, testInfo) => {
+  await openProgramLibrary(page, testInfo.project.name);
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+  await page.getByRole("tab", { name: /Drive archive review/ }).click();
+
+  const card = page.locator(".import-candidate-card").filter({
+    hasText: "Hazard Assessment Checklist.pdf"
+  });
+  await card.getByRole("button", { name: "Secure original download" }).click();
+  await expect(page.getByText("Secure download unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByText(/does not match the reviewed archive record/i)).toBeVisible();
+});
+
+test("Drive archive query failure does not break the workspace", async ({ page }, testInfo) => {
+  await openProgramLibrary(page, testInfo.project.name);
+  await expect(page.getByRole("heading", { name: "Safety programs & forms" })).toBeVisible();
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+  await page.getByRole("tab", { name: /Drive archive review/ }).click();
+
+  await expect(page.getByText(/private Drive archive is temporarily unavailable/i)).toBeVisible();
+  await expect(page.getByText("Workspace load failed", { exact: true })).toHaveCount(0);
+});
+
+test("Drive archive review is hidden from non-manager roles", async ({ page }, testInfo) => {
+  await openProgramLibrary(page, testInfo.project.name);
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+
+  await expect(page.getByRole("tab", { name: /Drive archive review/ })).toHaveCount(0);
+  const queriedPrivateArchive = await page.evaluate(() => window.__safetyOpsFakeDb.calls.some((call) => (
+    call.method === "from" && call.table === "safety_program_import_candidates"
+  )));
+  expect(queriedPrivateArchive).toBe(false);
+});
+
+test("Drive archive review is available to safety managers", async ({ page }, testInfo) => {
+  await openProgramLibrary(page, testInfo.project.name);
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+
+  const archiveTab = page.getByRole("tab", { name: /Drive archive review/ });
+  await expect(archiveTab).toBeVisible();
+  await archiveTab.click();
+  await expect(page.locator(".import-candidate-card")).toHaveCount(7);
 });
 
 test("program library has no horizontal page overflow on mobile", async ({ page }, testInfo) => {

@@ -25,7 +25,8 @@
     programs: [],
     forms: [],
     folders: [],
-    looseResources: []
+    looseResources: [],
+    importCandidates: []
   };
   const uiStoragePrefix = "safetyops.ui.";
   const authHashParameters = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -83,6 +84,9 @@
     programCategory: "programs",
     programQuery: "",
     formLibraryMode: localStorage.getItem(`${uiStoragePrefix}formsMode`) || "originals",
+    formArchiveKind: localStorage.getItem(`${uiStoragePrefix}formArchiveKind`) || "all",
+    formArchiveStatus: localStorage.getItem(`${uiStoragePrefix}formArchiveStatus`) || "all",
+    formArchiveError: "",
     localFormUploads: [],
     programDrawerId: null,
     originalPreviewId: null,
@@ -110,7 +114,7 @@
     window.SAFETYOPS_ENABLE_LOCAL_UPLOAD_STAGING === true
     && ["127.0.0.1", "localhost"].includes(window.location.hostname)
   );
-  if (!["originals", "uploads", "templates"].includes(state.formLibraryMode)) {
+  if (!["originals", "archive", "uploads", "templates"].includes(state.formLibraryMode)) {
     state.formLibraryMode = "originals";
   }
   if (!localUploadStagingEnabled && state.formLibraryMode === "uploads") {
@@ -928,6 +932,7 @@
     programLibrary.forms = [];
     programLibrary.folders = [];
     programLibrary.looseResources = [];
+    programLibrary.importCandidates = [];
     programLibrary.extracts = {};
   }
 
@@ -1005,7 +1010,8 @@
         programAssignmentsResult,
         programSubmissionsResult,
         programRegulatoryLinksResult,
-        programFormFilesResult
+        programFormFilesResult,
+        importCandidatesResult
       ] = await Promise.all([
         supabaseClient
           .from("companies")
@@ -1162,7 +1168,15 @@
           .from("safety_program_form_template_files")
           .select("id, program_version_id, form_template_version_id, file_role, is_primary, source_locator, created_at")
           .eq("company_id", membership.company_id)
-          .limit(1000)
+          .limit(1000),
+        ["corporate_admin", "safety_manager"].includes(membership.role)
+          ? supabaseClient
+            .from("safety_program_import_candidates")
+            .select("id, company_id, display_name, folder_hint, candidate_kind, review_status, classification, language, proposed_location_codes, page_count, render_verified, mime_type, size_bytes, content_sha256, source_path_sha256, created_at")
+            .eq("company_id", membership.company_id)
+            .order("display_name", { ascending: true })
+            .limit(2000)
+          : Promise.resolve({ data: [], error: null })
       ]);
       if (!isCurrentRequest()) return;
       const failedResult = [
@@ -1229,6 +1243,12 @@
       const rawProgramSubmissions = programSubmissionsResult.data || [];
       const rawProgramRegulatoryLinks = programRegulatoryLinksResult.data || [];
       const rawProgramFormFiles = programFormFilesResult.data || [];
+      const rawImportCandidates = importCandidatesResult?.error
+        ? []
+        : importCandidatesResult.data || [];
+      state.formArchiveError = importCandidatesResult?.error
+        ? "The private Drive archive is temporarily unavailable. The rest of the workspace remains active."
+        : "";
       const memberNameById = new Map(rawMembers.map((member) => [
         member.user_id,
         member.profiles?.full_name?.trim() || "Team member"
@@ -1673,7 +1693,8 @@
           programs: programLibrary.programs.length,
           digitalForms: programLibrary.forms.length,
           folders: 0,
-          looseResources: 0
+          looseResources: 0,
+          importCandidates: rawImportCandidates.length
         },
         extraction: {
           extracted: rawProgramVersions.filter((version) => version.content_manifest_sha256).length,
@@ -1681,8 +1702,11 @@
           ocrRequired: 0
         },
         binaryIngestion: {
-          filesVerified: rawProgramFormFiles.length,
-          totalBytes: 0,
+          filesVerified: rawProgramFormFiles.length
+            + rawImportCandidates.filter((candidate) => candidate.render_verified).length,
+          totalBytes: rawImportCandidates.reduce((sum, candidate) => (
+            sum + Number(candidate.size_bytes || 0)
+          ), 0),
           capturedOn: null,
           storageTarget: "Private Supabase Storage"
         }
@@ -1884,6 +1908,54 @@
           accent: ["#24a37a", "#3c8ce7", "#e0a12b", "#8b6bd6", "#df655d"][index % 5]
         };
       });
+      const locationIdByCode = new Map(data.locations.map((location) => [
+        String(location.short || "").toUpperCase(),
+        location.id
+      ]));
+      programLibrary.importCandidates = rawImportCandidates.map((candidate) => {
+        const proposedLocationCodes = Array.isArray(candidate.proposed_location_codes)
+          ? candidate.proposed_location_codes.map((code) => String(code)).filter(Boolean)
+          : [];
+        return {
+          id: candidate.id,
+          title: candidate.display_name || "Unnamed source item",
+          displayName: candidate.display_name || "Unnamed source item",
+          folderHint: candidate.folder_hint || "Source folder not classified",
+          candidateKind: candidate.candidate_kind || "unknown",
+          classification: candidate.classification || "unknown",
+          archiveKind: importCandidateKind(candidate.candidate_kind),
+          reviewStatus: candidate.review_status || "pending_review",
+          language: candidate.language || "Unspecified",
+          proposedLocationCodes,
+          proposedLocationIds: proposedLocationCodes
+            .map((code) => locationIdByCode.get(String(code).toUpperCase()))
+            .filter(Boolean),
+          locations: [],
+          pageCount: Number(candidate.page_count || 0),
+          renderVerified: Boolean(candidate.render_verified),
+          mimeType: candidate.mime_type || "application/octet-stream",
+          sizeBytes: Number(candidate.size_bytes || 0),
+          contentSha256: candidate.content_sha256 || null,
+          sourcePathSha256: candidate.source_path_sha256 || null,
+          createdAt: candidate.created_at || null
+        };
+      });
+      if (
+        state.formArchiveKind !== "all"
+        && !importCandidateKinds.some((definition) => definition.id === state.formArchiveKind)
+      ) {
+        state.formArchiveKind = "all";
+        localStorage.setItem(`${uiStoragePrefix}formArchiveKind`, state.formArchiveKind);
+      }
+      if (
+        state.formArchiveStatus !== "all"
+        && !programLibrary.importCandidates.some((candidate) => (
+          candidate.reviewStatus === state.formArchiveStatus
+        ))
+      ) {
+        state.formArchiveStatus = "all";
+        localStorage.setItem(`${uiStoragePrefix}formArchiveStatus`, state.formArchiveStatus);
+      }
       state.localFormUploads = [];
       state.locationId = membership.default_location_id
         && data.locations.some((location) => location.id === membership.default_location_id)
@@ -1893,6 +1965,10 @@
       state.authStatus = "ready";
       state.authMessage = "";
       state.authBusy = false;
+      if (!canManageCompany() && state.formLibraryMode === "archive") {
+        state.formLibraryMode = "originals";
+        localStorage.setItem(`${uiStoragePrefix}formsMode`, state.formLibraryMode);
+      }
       try {
         if (!localUploadStagingEnabled) return render();
         const localFormUploads = await listLocalFormUploads();
@@ -2937,6 +3013,99 @@
     return allFormTemplates().filter((item) => item.originalFile?.id);
   }
 
+  const importCandidateKinds = [
+    { id: "form_candidate", label: "Reusable forms", singular: "Reusable form candidate", tone: "form" },
+    { id: "completed_record", label: "Completed records", singular: "Completed record", tone: "record" },
+    { id: "program", label: "Programs", singular: "Safety program", tone: "program" },
+    { id: "training", label: "Training", singular: "Training material", tone: "training" },
+    { id: "reference", label: "References", singular: "Reference material", tone: "reference" },
+    { id: "evidence", label: "Evidence", singular: "Safety evidence", tone: "evidence" },
+    { id: "unknown", label: "Unclassified", singular: "Unclassified item", tone: "unknown" }
+  ];
+
+  function importCandidateKind(candidateKind) {
+    const values = [candidateKind]
+      .map((value) => String(value || "").toLowerCase().replaceAll(/[^a-z0-9]+/g, "_"));
+    const exactAliases = {
+      form: "form_candidate",
+      form_candidate: "form_candidate",
+      form_template: "form_candidate",
+      reusable_form: "form_candidate",
+      template: "form_candidate",
+      completed_form: "completed_record",
+      completed_record: "completed_record",
+      record: "completed_record",
+      submission: "completed_record",
+      safety_program: "program",
+      program: "program",
+      program_document: "program",
+      policy: "program",
+      procedure: "program",
+      course: "training",
+      training: "training",
+      training_material: "training",
+      reference: "reference",
+      guide: "reference",
+      manual: "reference",
+      evidence: "evidence",
+      proof: "evidence",
+      unknown: "unknown",
+      unclassified: "unknown"
+    };
+    for (const value of values) {
+      if (exactAliases[value]) return exactAliases[value];
+    }
+    const signal = values.join(" ");
+    if (/(completed|filled|signed|submission|record)/.test(signal)) return "completed_record";
+    if (/(evidence|proof|photo|incident)/.test(signal)) return "evidence";
+    if (/(training|course|lesson|quiz)/.test(signal)) return "training";
+    if (/(program|policy|procedure|plan)/.test(signal)) return "program";
+    if (/(reference|guide|manual|appendix|resource)/.test(signal)) return "reference";
+    if (/(form|template|checklist|inspection)/.test(signal)) return "form_candidate";
+    return "unknown";
+  }
+
+  function importCandidateKindDefinition(kind) {
+    return importCandidateKinds.find((definition) => definition.id === kind)
+      || importCandidateKinds[importCandidateKinds.length - 1];
+  }
+
+  function importCandidateRows() {
+    return canManageCompany() ? programLibrary.importCandidates || [] : [];
+  }
+
+  function isPdfImportCandidate(item) {
+    return item?.mimeType === "application/pdf";
+  }
+
+  function isVerifiedPdfImportCandidate(item) {
+    return isPdfImportCandidate(item)
+      && item.renderVerified === true
+      && Number.isInteger(item.pageCount)
+      && item.pageCount > 0;
+  }
+
+  function importCandidateOriginalLabel(item) {
+    if (isPdfImportCandidate(item)) {
+      const pages = item.pageCount > 0
+        ? ` · ${item.pageCount} page${item.pageCount === 1 ? "" : "s"}`
+        : "";
+      return isVerifiedPdfImportCandidate(item)
+        ? `Verified original PDF${pages}`
+        : `PDF source${pages} · full-document verification pending`;
+    }
+    const format = ({
+      "application/msword": "DOC",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PPTX",
+      "image/jpeg": "JPEG",
+      "image/png": "PNG",
+      "image/x-adobe-dng": "DNG"
+    })[item.mimeType] || "source file";
+    return `Verified original ${format} · SHA-256 matched`;
+  }
+
   function formatFileSize(bytes) {
     const value = Number(bytes || 0);
     if (value < 1024) return `${value} B`;
@@ -3090,7 +3259,12 @@
       ? state.localFormUploads
       : state.formLibraryMode === "templates"
         ? allFormTemplates()
-        : originalFormTemplates();
+        : state.formLibraryMode === "archive"
+          ? importCandidateRows().filter((item) => (
+            (state.formArchiveKind === "all" || item.archiveKind === state.formArchiveKind)
+            && (state.formArchiveStatus === "all" || item.reviewStatus === state.formArchiveStatus)
+          ))
+          : originalFormTemplates();
     const categoryMap = {
       programs: programLibrary.programs || [],
       forms: formRows,
@@ -3118,6 +3292,15 @@
       item.type,
       item.filename,
       item.sha256,
+      item.displayName,
+      item.folderHint,
+      item.candidateKind,
+      item.classification,
+      item.reviewStatus,
+      item.mimeType,
+      item.contentSha256,
+      item.sourcePathSha256,
+      ...(item.proposedLocationCodes || []),
       ...(item.topics || []),
       ...(item.citations || []),
       ...(item.children || [])
@@ -3195,7 +3378,57 @@
     `;
   }
 
+  function renderImportCandidateCard(item) {
+    const kind = importCandidateKindDefinition(item.archiveKind);
+    const proposedLocations = item.proposedLocationCodes.length
+      ? item.proposedLocationCodes.join(", ")
+      : "None proposed · review required";
+    const contentSha = item.contentSha256
+      ? String(item.contentSha256)
+      : "Pending";
+    const sourcePathSha = item.sourcePathSha256
+      ? String(item.sourcePathSha256)
+      : "Pending";
+    const sensitivity = ["internal", "confidential", "restricted"].includes(item.classification)
+      ? item.classification
+      : "internal";
+    const verifiedOriginal = isPdfImportCandidate(item)
+      ? isVerifiedPdfImportCandidate(item)
+      : Boolean(item.contentSha256 && item.sizeBytes > 0);
+    return `
+      <article class="program-card private form-file-card import-candidate-card kind-${escapeHtml(kind.tone)} sensitivity-${escapeHtml(sensitivity)}" data-candidate-kind="${escapeHtml(kind.id)}">
+        <div class="program-card-top">
+          <span class="import-kind-badge kind-${escapeHtml(kind.tone)}">${escapeHtml(kind.singular)}</span>
+          <span class="import-review-badge">${escapeHtml(readableStatus(item.reviewStatus))}</span>
+          <span class="import-sensitivity-badge ${escapeHtml(sensitivity)}">${escapeHtml(readableStatus(sensitivity))}</span>
+        </div>
+        <h3>${escapeHtml(item.displayName)}</h3>
+        <p class="import-original-status ${verifiedOriginal ? "verified" : "pending"}">${escapeHtml(importCandidateOriginalLabel(item))}</p>
+        ${sensitivity === "restricted" ? `<p class="restricted-source-warning">Restricted personnel or sensitive safety record. Reconfirm business need before downloading.</p>` : ""}
+        <dl class="import-trace-grid" aria-label="Source snapshot trace">
+          <div><dt>Filename</dt><dd>${escapeHtml(item.displayName)}</dd></div>
+          <div><dt>Folder hint</dt><dd>${escapeHtml(item.folderHint)}</dd></div>
+          <div><dt>MIME</dt><dd>${escapeHtml(item.mimeType)}</dd></div>
+          <div><dt>Bytes</dt><dd>${escapeHtml(formatFileSize(item.sizeBytes))}</dd></div>
+          <div><dt>Content SHA-256</dt><dd><code class="full-trace-hash">${escapeHtml(contentSha)}</code></dd></div>
+          <div><dt>Source path fingerprint</dt><dd><code class="full-trace-hash">${escapeHtml(sourcePathSha)}</code></dd></div>
+          <div><dt>Language</dt><dd>${escapeHtml(item.language)}</dd></div>
+          <div><dt>Proposed locations (unapproved)</dt><dd>${escapeHtml(proposedLocations)}</dd></div>
+        </dl>
+        <div class="program-card-footer">
+          <span class="program-version">Review · ${escapeHtml(readableStatus(item.reviewStatus))}</span>
+          <div class="program-card-actions">
+            <button class="button small primary" type="button" data-action="download-import-candidate" data-candidate-id="${escapeHtml(item.id)}">Secure original download</button>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
   function renderProgramCard(item) {
+    if (state.programCategory === "forms" && state.formLibraryMode === "archive") {
+      return renderImportCandidateCard(item);
+    }
     if (state.programCategory === "forms" && state.formLibraryMode === "originals") {
       return renderOriginalFormCard(item);
     }
@@ -3244,13 +3477,58 @@
 
   function renderFormLibraryControls() {
     if (state.programCategory !== "forms") return "";
+    const archiveRows = importCandidateRows();
     const modes = [
       { id: "originals", label: "Original forms", count: originalFormTemplates().length },
+      ...(canManageCompany()
+        ? [{ id: "archive", label: "Drive archive review", count: archiveRows.length }]
+        : []),
       ...(localUploadStagingEnabled
         ? [{ id: "uploads", label: "Local staging", count: state.localFormUploads.length }]
         : []),
       { id: "templates", label: "Templates", count: allFormTemplates().length }
     ];
+    const archivePdfRows = archiveRows.filter(isPdfImportCandidate);
+    const archiveVerifiedPdfRows = archivePdfRows.filter(isVerifiedPdfImportCandidate);
+    const archivePageCount = archiveVerifiedPdfRows.reduce((sum, item) => sum + item.pageCount, 0);
+    const reviewStatuses = [...new Set(archiveRows.map((item) => item.reviewStatus).filter(Boolean))]
+      .sort((left, right) => left.localeCompare(right));
+    const archiveControls = state.formLibraryMode === "archive" ? `
+      <section class="import-archive-review" aria-labelledby="drive-archive-review-title">
+        <div class="import-archive-summary">
+          <div>
+            <p class="section-kicker">Manager-only private source inventory</p>
+            <h3 id="drive-archive-review-title">Drive archive review</h3>
+            <p>${archiveRows.length} source item${archiveRows.length === 1 ? "" : "s"} · ${archiveVerifiedPdfRows.length} verified original PDF${archiveVerifiedPdfRows.length === 1 ? "" : "s"} · ${archivePageCount} verified PDF page${archivePageCount === 1 ? "" : "s"}</p>
+          </div>
+          <span class="private-source-badge">Corporate admin / safety manager</span>
+        </div>
+        ${state.formArchiveError ? `<div class="import-archive-error" role="status">${escapeHtml(state.formArchiveError)}</div>` : ""}
+        <div class="import-kind-filters" role="group" aria-label="Filter Drive archive by classification">
+          ${[
+            { id: "all", label: "All items" },
+            ...importCandidateKinds
+          ].map((definition) => {
+            const count = definition.id === "all"
+              ? archiveRows.length
+              : archiveRows.filter((item) => item.archiveKind === definition.id).length;
+            return `
+              <button class="import-kind-filter ${state.formArchiveKind === definition.id ? "active" : ""}" type="button" data-action="form-archive-kind" data-kind="${escapeHtml(definition.id)}" aria-pressed="${state.formArchiveKind === definition.id}">
+                <span>${escapeHtml(definition.label)}</span><strong>${count}</strong>
+              </button>
+            `;
+          }).join("")}
+        </div>
+        <div class="import-archive-filter-row">
+          <label for="form-archive-status">Review status</label>
+          <select id="form-archive-status" class="filter-select">
+            <option value="all" ${state.formArchiveStatus === "all" ? "selected" : ""}>All review statuses</option>
+            ${reviewStatuses.map((status) => `<option value="${escapeHtml(status)}" ${state.formArchiveStatus === status ? "selected" : ""}>${escapeHtml(readableStatus(status))}</option>`).join("")}
+          </select>
+          <span>Search filenames, folder hints, MIME types, full SHA-256 fingerprints, languages, or unapproved location proposals above.</span>
+        </div>
+      </section>
+    ` : "";
     return `
       <div class="forms-library-toolbar">
         <div id="forms-library-tabs" class="tabs forms-library-tabs" role="tablist" aria-label="Form library sections">
@@ -3268,19 +3546,27 @@
         <button class="button primary" type="button" data-action="open-modal" data-modal="form-upload" ${localUploadStagingEnabled ? "" : "disabled"} title="${localUploadStagingEnabled ? "Stage a development-only local copy" : "Deploy the private prepare/scan/commit upload service first"}>${localUploadStagingEnabled ? "Stage form locally" : "Upload service required"}</button>
       </div>
       <div class="form-storage-boundary">
-        <strong>${state.formLibraryMode === "uploads" ? "Development-only local staging" : "Controlled form library"}</strong>
+        <strong>${state.formLibraryMode === "uploads"
+          ? "Development-only local staging"
+          : state.formLibraryMode === "archive"
+            ? "Private Drive source snapshots"
+            : "Controlled form library"}</strong>
         <span>${state.formLibraryMode === "uploads"
           ? "Uploads stay in this browser only. Production uses a private Supabase bucket, tenant RLS, malware scanning, and short-lived signed URLs."
-          : "Original files remain immutable; templates and completed submissions keep their source version and SHA-256 trace."}</span>
+          : state.formLibraryMode === "archive"
+            ? "This review queue exposes approved metadata only. Every original remains private and requires a fresh, short-lived authorization before download."
+            : "Original files remain immutable; templates and completed submissions keep their source version and SHA-256 trace."}</span>
       </div>
+      ${archiveControls}
       <div style="height:12px"></div>
     `;
   }
 
   function renderPrograms() {
+    const archiveRows = importCandidateRows();
     const categories = [
       { id: "programs", label: "Programs", icon: "P", count: (programLibrary.programs || []).length },
-      { id: "forms", label: "Forms", icon: "F", count: allFormTemplates().length + state.localFormUploads.length },
+      { id: "forms", label: "Forms", icon: "F", count: allFormTemplates().length + state.localFormUploads.length + archiveRows.length },
       { id: "folders", label: "Source folders", icon: "D", count: (programLibrary.folders || []).filter((item) => item.language !== "Spanish").length },
       { id: "translations", label: "Spanish", icon: "ES", count: (programLibrary.folders || []).filter((item) => item.language === "Spanish").length },
       { id: "resources", label: "Resources", icon: "R", count: (programLibrary.looseResources || []).length }
@@ -3289,9 +3575,10 @@
     const submissions = data.programSubmissions || [];
     const indexedItems = (programLibrary.folders || []).reduce((sum, folder) => sum + Number(folder.itemCount || 0), 0);
     const extraction = programLibrary.meta.extraction || { extracted: 0, imageOnly: 0, ocrRequired: 0 };
-    const hasTenantLibrary = programLibraryItems().length > 0;
+    const hasTenantLibrary = programLibraryItems().length > 0 || archiveRows.length > 0;
     const formModeLabel = {
       originals: "Original forms",
+      archive: "Drive archive review",
       uploads: "Local staging",
       templates: "Interactive templates"
     }[state.formLibraryMode] || "Forms";
@@ -3303,13 +3590,14 @@
         <article class="summary-card"><span>Original form PDFs</span><strong>${originalFormTemplates().length}</strong></article>
         <article class="summary-card"><span>Interactive templates</span><strong>${allFormTemplates().length}</strong></article>
         <article class="summary-card"><span>Submitted forms</span><strong>${submissions.filter((item) => item.status === "Submitted").length}</strong></article>
+        ${canManageCompany() ? `<article class="summary-card"><span>Drive archive items</span><strong>${archiveRows.length}</strong></article>` : ""}
       </section>
       <div style="height:14px"></div>
       ${hasTenantLibrary ? `<section class="import-status running" aria-label="Safety program ingestion status">
         <span class="import-status-icon">↻</span>
         <div>
           <strong>Private-source inventory connected</strong>
-          <p>${extraction.extracted} of ${(programLibrary.programs || []).length} program sources have traceable text outlines; ${indexedItems} source items are indexed. ${escapeHtml(programLibrary.meta.ingestionMode || "Source metadata is indexed.")}</p>
+          <p>${extraction.extracted} of ${(programLibrary.programs || []).length} program sources have traceable text outlines; ${indexedItems + archiveRows.length} source items are indexed. ${escapeHtml(programLibrary.meta.ingestionMode || "Source metadata is indexed.")}</p>
         </div>
         <span class="status-pill ${programLibrary.programs.some((item) => item.programStatus === "published") ? "current" : "pending"}">${programLibrary.programs.some((item) => item.programStatus === "published") ? "Controlled records active" : "Publication review required"}</span>
       </section>` : `<section class="import-status" aria-label="Tenant library status">
@@ -3339,7 +3627,7 @@
         </aside>
         <div class="program-library-main">
           <form id="program-search-form" class="programs-toolbar">
-            <input id="program-query" class="filter-input program-search" name="query" value="${escapeHtml(state.programQuery)}" placeholder="Search programs, forms, folders, topics, or citations" aria-label="Search safety programs">
+            <input id="program-query" class="filter-input program-search" name="query" value="${escapeHtml(state.programQuery)}" placeholder="${state.programCategory === "forms" && state.formLibraryMode === "archive" ? "Search filenames, folders, SHA, language, or locations" : "Search programs, forms, folders, topics, or citations"}" aria-label="${state.programCategory === "forms" && state.formLibraryMode === "archive" ? "Search Drive archive" : "Search safety programs"}">
             <button class="button" type="submit">Search</button>
             ${state.programQuery ? `<button class="button" type="button" data-action="clear-program-search">Clear</button>` : ""}
           </form>
@@ -3348,11 +3636,13 @@
           <div class="program-library-header">
             <div>
               <h2>${escapeHtml(state.programCategory === "forms" ? formModeLabel : categories.find((item) => item.id === state.programCategory)?.label || "Programs")}</h2>
-              <p>${rows.length} item${rows.length === 1 ? "" : "s"} available for ${state.locationId === "all" ? escapeHtml(allLocationsLabel(true)) : escapeHtml(locationName(state.locationId))}</p>
+              <p>${state.programCategory === "forms" && state.formLibraryMode === "archive"
+                ? `${rows.length} item${rows.length === 1 ? "" : "s"} in the company review queue · location tags are unapproved proposals`
+                : `${rows.length} item${rows.length === 1 ? "" : "s"} available for ${state.locationId === "all" ? escapeHtml(allLocationsLabel(true)) : escapeHtml(locationName(state.locationId))}`}</p>
             </div>
             <span class="private-source-badge">Access-controlled</span>
           </div>
-          <div class="program-grid">
+          <div class="program-grid ${state.programCategory === "forms" && state.formLibraryMode === "archive" ? "import-archive-grid" : ""}">
             ${rows.map(renderProgramCard).join("") || renderEmptyState("⌕", "No source items found", "Try another category, location, or search term.")}
           </div>
         </div>
@@ -5207,6 +5497,71 @@
     }
   }
 
+  async function requestImportCandidateDownload(candidateId) {
+    const candidate = importCandidateRows().find((item) => item.id === candidateId);
+    if (!canManageCompany() || !candidate) {
+      showToast("Original unavailable", "This private source item is available only to authorized safety managers.");
+      return;
+    }
+    if (
+      candidate.classification === "restricted"
+      && !window.confirm("This is a restricted personnel or sensitive safety record. Confirm that you have a business need to download it.")
+    ) {
+      showToast("Download cancelled", "The restricted original was not opened.");
+      return;
+    }
+    try {
+      if (!supabaseClient?.functions?.invoke) {
+        throw new Error("The short-lived download service is not deployed yet.");
+      }
+      const signedResult = await supabaseClient.functions.invoke("sign-form-file", {
+        body: { candidate_id: candidate.id }
+      });
+      if (signedResult.error) throw signedResult.error;
+      const metadata = signedResult.data || {};
+      const metadataMatches = (
+        metadata.filename === candidate.displayName
+        && metadata.mime_type === candidate.mimeType
+        && Number(metadata.size_bytes) === candidate.sizeBytes
+        && metadata.content_sha256 === candidate.contentSha256
+        && Number(metadata.page_count || 0) === candidate.pageCount
+        && Boolean(metadata.render_verified) === candidate.renderVerified
+      );
+      if (!metadataMatches) {
+        throw new Error("The authorized file metadata does not match the reviewed archive record.");
+      }
+      const expiresAt = Date.parse(metadata.expires_at || "");
+      if (
+        !Number.isFinite(expiresAt)
+        || expiresAt <= Date.now()
+        || expiresAt > Date.now() + 10 * 60 * 1000
+      ) {
+        throw new Error("The download authorization has an invalid expiration.");
+      }
+      const signedUrl = metadata.signed_url;
+      const parsedUrl = new URL(signedUrl);
+      const projectHost = new URL(window.SAFETYOPS_SUPABASE_URL).hostname;
+      if (
+        parsedUrl.protocol !== "https:"
+        || parsedUrl.hostname !== projectHost
+        || !parsedUrl.pathname.startsWith("/storage/v1/object/sign/")
+      ) {
+        throw new Error("The download service returned an invalid URL.");
+      }
+      const link = document.createElement("a");
+      link.href = parsedUrl.href;
+      link.download = metadata.filename || "company-safety-original";
+      link.rel = "noopener noreferrer";
+      link.hidden = true;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      showToast("Secure original issued", `${candidate.displayName} is available through a short-lived authorized URL.`);
+    } catch (error) {
+      showToast("Secure download unavailable", error?.message || "The original could not be authorized.");
+    }
+  }
+
   function formAnswerValues(form, template) {
     const formData = new FormData(form);
     const answers = {};
@@ -5498,10 +5853,22 @@
       const allowedModes = new Set([
         "originals",
         "templates",
+        ...(canManageCompany() ? ["archive"] : []),
         ...(localUploadStagingEnabled ? ["uploads"] : [])
       ]);
       state.formLibraryMode = allowedModes.has(target.dataset.mode) ? target.dataset.mode : "originals";
       localStorage.setItem(`${uiStoragePrefix}formsMode`, state.formLibraryMode);
+      render();
+      return;
+    }
+
+    if (action === "form-archive-kind") {
+      const requestedKind = target.dataset.kind || "all";
+      state.formArchiveKind = requestedKind === "all"
+        || importCandidateKinds.some((definition) => definition.id === requestedKind)
+        ? requestedKind
+        : "all";
+      localStorage.setItem(`${uiStoragePrefix}formArchiveKind`, state.formArchiveKind);
       render();
       return;
     }
@@ -5517,6 +5884,11 @@
 
     if (action === "download-form-original") {
       requestOriginalFormDownload(target.dataset.formId);
+      return;
+    }
+
+    if (action === "download-import-candidate") {
+      requestImportCandidateDownload(target.dataset.candidateId);
       return;
     }
 
@@ -5715,6 +6087,12 @@
     }
     if (event.target.id === "standards-scope") {
       state.standardScope = event.target.value;
+      render();
+      return;
+    }
+    if (event.target.id === "form-archive-status") {
+      state.formArchiveStatus = event.target.value || "all";
+      localStorage.setItem(`${uiStoragePrefix}formArchiveStatus`, state.formArchiveStatus);
       render();
     }
   });
