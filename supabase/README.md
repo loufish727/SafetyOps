@@ -2,7 +2,7 @@
 
 SafetyOps uses Supabase Auth, PostgreSQL, Row Level Security, private Storage, security-definer RPCs, and Edge Functions as the authority for LFES company data. GitHub Pages is only the public browser client.
 
-All database and Edge controls described here are **DESIGNED/UNPROVEN**. They are present in source but have not been shown applied, compiled, and exercised in a dedicated SafetyOps Supabase project. Do not load real company data until the staging proof in this document is complete.
+The dedicated hosted SafetyOps project's migration ledger is aligned through `012` with no pending version; migrations `010` through `012` compiled and applied in the final pgcrypto compatibility sequence. Supabase's ledger is version-based and does not prove checksum identity for previously applied legacy files. RLS, role, Storage, Edge, and workflow behavior remain **PARTIAL/UNPROVEN** until the staging proof in this document is complete.
 
 ## Migration order
 
@@ -12,12 +12,14 @@ Apply every migration in filename order. Later migrations depend on objects and 
 2. `202607300002_regulatory_traceability.sql` — Versioned regulatory sources, immutable source observations, requirements, releases, location profiles, jurisdiction assignments, applicability assessments, approved control mappings, evidence links, change detection, and impact review.
 3. `202607300003_safety_programs.sql` — Private source-pinned safety programs, versions, sections, location applicability, digital forms, assignments, submissions, typed answers, signatures, acknowledgements, and audit records.
 4. `202607300004_form_originals.sql` — Immutable original/template file links, service-only upload sessions, file authorization helpers, and controlled metadata RPCs.
-5. `202607300005_company_onboarding.sql` — Atomic authenticated company-owner onboarding.
-6. `202607300006_state_jurisdiction_onboarding.sql` — Oregon, Washington, and California jurisdiction seeds plus first-location onboarding with a draft profile and review-required assignment.
+5. `202607300005_company_onboarding.sql` — Historical authenticated company-owner onboarding revision, retired by migration `011`.
+6. `202607300006_state_jurisdiction_onboarding.sql` — Oregon, Washington, and California jurisdiction seeds plus the historical four-argument first-location onboarding revision, retired by migration `011`.
 7. `202607300007_form_file_access_ledger.sql` — Service-only allow/deny ledger for controlled form-file download decisions.
 8. `202607300008_company_location_onboarding.sql` — Tenant-safe creation of additional locations with draft OR/WA/CA regulatory profiles.
 9. `202607300009_inspection_regulatory_trace.sql` — Idempotent inspection submission pinned to the exact published question schema and an immutable server-derived regulatory context. A draft/missing profile or unresolved jurisdiction is recorded as `review_required`; the inspection remains operational, but the database emits zero compliance-evidence links until the profile, jurisdiction, applicability, mapping, requirement, and release chain is reviewed, approved, and effective.
 10. `202607300010_lfes_role_and_form_integrity.sql` — Database-authoritative read-only auditor enforcement, location-scoped personnel privacy, immutable inspection tenant/location/template identity, active membership/location revalidation on terminal form submission, current/effective program applicability, server-derived submission context and signature evidence, answer/attachment freezing after signature, and final form-evidence hashes. Signature inserts provide only pinned entity IDs; the database derives signer name from profile/JWT context, company role, method from field type, intent from field label, timestamp, unsigned-payload digest, canonical signature record, and signature hash.
+11. `202607310011_auth_and_tenant_integrity.sql` — Retires both browser self-onboarding overloads, enforces one active company per user, protects and audit-traces corporate-administrator membership, fixes regulatory-profile supersession, derives jurisdiction reviewer identity/time in PostgreSQL, requires resolved review before profile/program/form use, blocks direct location inserts, and adds a service-role-only atomic bootstrap with truthful system provenance for an invited first owner and initial locations.
+12. `202607310012_pgcrypto_schema_compatibility.sql` — Preserves the existing security-definer function paths while adding the hosted `extensions` schema required for explicit pgcrypto digest resolution.
 
 Migration `002` requires PostgreSQL 15 or newer because it uses `UNIQUE NULLS NOT DISTINCT`.
 
@@ -25,7 +27,7 @@ Migration `002` requires PostgreSQL 15 or newer because it uses `UNIQUE NULLS NO
 
 1. Create a dedicated SafetyOps Supabase project.
 2. Link the local project or supply the target project reference to the CLI.
-3. Apply migrations `001` through `010` in order and verify that each transaction completed.
+3. Apply migrations `001` through `012` in order and verify that each transaction completed.
 4. Deploy the controlled-download Edge Function:
 
    ```bash
@@ -42,8 +44,9 @@ Migration `002` requires PostgreSQL 15 or newer because it uses `UNIQUE NULLS NO
 
 6. Confirm that `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are available only in the Edge Function environment. The service-role key must never be added to `supabase-config.js`, GitHub Pages, or any browser bundle.
 7. Put only the Supabase project URL and publishable/anon key in `supabase-config.js`.
-8. Configure the Auth Site URL and redirect allowlist for the production URL and approved local origins.
-9. Exercise onboarding, company/location isolation, inspection truthful degradation, signed downloads, auditor denial, personnel privacy, form-signature integrity, and cross-tenant denial tests before importing real data.
+8. Push and verify `supabase/config.toml`: the exact production Site URL and redirect, global public signup disabled, anonymous sign-in disabled, the email/password provider enabled, email confirmation enabled, and secure password change enabled. Do not add broad wildcard or production-localhost redirects.
+9. In hosted Auth settings, enforce a minimum password length of at least 12 characters and the strongest available character/leaked-password controls. Configure production SMTP before using invitation or recovery email; the default Supabase sender refuses non-team addresses and is best-effort only.
+10. Exercise invitation/password setup, invalid and expired callbacks, non-enumerating recovery, administrator provisioning, company/location isolation, one-active-company and last-admin protection, authoritative jurisdiction review, inspection truthful degradation, signed downloads, auditor denial, personnel privacy, form-signature integrity, and cross-tenant denial tests before importing real data.
 
 `supabase/config.toml` keeps JWT verification enabled for `sign-form-file`.
 

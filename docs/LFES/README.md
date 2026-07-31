@@ -33,19 +33,23 @@ security-definer RPC, Edge Function, or cross-company behavior.
 
 ## Current posture
 
-SafetyOps is an empty public application shell with static regulatory reference
-artifacts and a Supabase-backed implementation in source. The repository
-contains ten ordered migrations and one Edge Function. The latest full local
-Playwright run passed 39 tests, skipped 7 conditional/project instances, and
+SafetyOps is a configured public application shell with static regulatory
+reference artifacts and a Supabase-backed implementation. The repository
+contains twelve ordered migrations and one Edge Function. Hosted migration
+history is aligned through `012`, and `010`–`012` compiled/applied in the final
+compatibility sequence; exact legacy applied-file checksums are not asserted.
+The latest full local
+Playwright run passed 67 tests, skipped 7 conditional/project instances, and
 failed 0. The public-release process uses an Ed25519-signed v2 manifest over the
 exact 12-file deployment artifact and exact sanitized release tree, verified
 in CI; only the attestation JSON/signature are omitted from tree hashing to
 avoid circular input.
 
-Those results do not prove PostgreSQL, RLS, Storage, the Edge Function, or real
-tenant persistence. No SafetyOps Supabase project has been shown to contain and
-exercise migrations `001` through `010`, and the Edge Function has not been
-shown deployed. Production tenant operation remains **BLOCKED** even when the
+Those results prove hosted version-ledger alignment and final compatibility
+application, but do not prove historical applied-file identity or
+the PostgreSQL hostile-role matrix, Storage, the Edge Function, or complete
+tenant workflows. The Edge Function has not been shown deployed. Production
+tenant operation remains **BLOCKED** even when the
 hosted public shell is a valid connection-required release. See:
 
 1. `../ARCHITECTURE.md`

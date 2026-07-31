@@ -1413,7 +1413,7 @@ begin
   end if;
 
   new.content_sha256 := encode(
-    digest(
+    extensions.digest(
       convert_to(
         jsonb_build_object(
           'requirement_id', new.requirement_id,
@@ -1470,7 +1470,7 @@ begin
 
   if new.exact_excerpt is not null then
     new.exact_excerpt_sha256 := encode(
-      digest(convert_to(new.exact_excerpt, 'UTF8'), 'sha256'),
+      extensions.digest(convert_to(new.exact_excerpt, 'UTF8'), 'sha256'),
       'hex'
     );
   else
@@ -1851,7 +1851,7 @@ begin
   end if;
 
   new.assessment_sha256 := encode(
-    digest(
+    extensions.digest(
       convert_to(
         jsonb_build_object(
           'company_id', new.company_id,
@@ -1951,7 +1951,7 @@ begin
   end if;
 
   new.mapping_sha256 := encode(
-    digest(
+    extensions.digest(
       convert_to(
         jsonb_build_object(
           'company_id', new.company_id,
@@ -2161,14 +2161,14 @@ begin
   before_hash := case
     when prior_record is null then null
     else encode(
-      digest(convert_to(prior_record::text, 'UTF8'), 'sha256'),
+      extensions.digest(convert_to(prior_record::text, 'UTF8'), 'sha256'),
       'hex'
     )
   end;
   after_hash := case
     when tg_op = 'DELETE' then null
     else encode(
-      digest(convert_to(current_record::text, 'UTF8'), 'sha256'),
+      extensions.digest(convert_to(current_record::text, 'UTF8'), 'sha256'),
       'hex'
     )
   end;
@@ -2182,7 +2182,7 @@ begin
   end;
 
   event_hash := encode(
-    digest(
+    extensions.digest(
       convert_to(
         jsonb_build_object(
           'schema', tg_table_schema,

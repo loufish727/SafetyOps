@@ -5,10 +5,11 @@ higher layer passed.
 
 | Layer | What it can prove | Current result |
 |---|---|---:|
-| Source/static | JavaScript parses; public seed files are empty; ten ordered migrations and Edge source exist. | PARTIAL: source exists; database/Edge execution does not |
-| Mocked browser | UI, responsive layouts, role presentation, onboarding, inspection/form RPC contracts, and selected workflows behave against the fake Supabase client. The targeted form test confirms only pinned signature IDs are sent. | PASS: 39 passed, 7 conditional/project skips, 0 failed |
+| Source/static | JavaScript parses; public seed files are empty; twelve ordered migrations and Edge source exist. | PARTIAL: source exists; Edge execution does not |
+| Mocked browser | UI, responsive layouts, role presentation, invite/recovery edge cases, hosted password-class contract, stale-session rejection, provisioning pending, Pacific/Boise location-timezone handling, inspection/form RPC contracts, and selected workflows behave against the fake Supabase client. The targeted form test confirms only pinned signature IDs are sent. | PASS: 67 passed, 7 conditional/project skips, 0 failed |
 | Signed public release | The exact 12-file `dist` artifact and exact sanitized release tree match the local private-denylist approval. | PROVEN for the signed release: strict Ed25519 v2 schema, signature, both aggregates, and both exact file lists verified in CI |
-| Clean local PostgreSQL | Migrations compile in order; functions, constraints, triggers, RLS, and grants exist in the catalog. | NOT RUN (`001`–`010`) |
+| Clean local PostgreSQL | Migrations compile in order; functions, constraints, triggers, RLS, and grants exist in the catalog. | NOT RUN (`001`–`012`); local Docker is unavailable |
+| Hosted versioned application/upgrade | Migration versions are recorded without pending history, and the final compatibility sequence compiles/applies. | PASS: ledger aligned through `012`; `010`–`012` compiled/applied. Legacy file-checksum identity, catalog assertions, and hostile-role runtime tests remain open |
 | Hosted anonymous | Anonymous Data API, RPC, Storage, and function boundaries reject unauthorized use. | NOT RUN |
 | Hosted authenticated roles | Two-company and cross-location allow/deny behavior works for each SafetyOps role. | NOT RUN |
 | Hosted functional | Onboarding, inspections, incidents, actions, training, programs, signatures, and private files persist correctly. | NOT RUN |

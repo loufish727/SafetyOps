@@ -5,6 +5,14 @@ const {
 } = require("./helpers/authenticated-workspace");
 
 test("unconfigured public build requires Supabase and contains no demo company", async ({ page }) => {
+  await page.route("**/supabase-config.js", (route) => route.fulfill({
+    contentType: "application/javascript",
+    body: `
+      window.SAFETYOPS_SUPABASE_URL = "";
+      window.SAFETYOPS_SUPABASE_ANON_KEY = "";
+      window.SAFETYOPS_ALLOW_PUBLIC_SIGNUP = false;
+    `
+  }));
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Connect SafetyOps to Supabase" })).toBeVisible();

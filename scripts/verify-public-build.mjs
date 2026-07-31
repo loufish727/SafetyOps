@@ -156,6 +156,13 @@ async function loadPrivateDenylist() {
   }
 }
 
+async function loadPrivateAttestationKey() {
+  const secretPrivateKey =
+    process.env.SAFETYOPS_PUBLIC_ATTESTATION_PRIVATE_KEY_PEM;
+  if (secretPrivateKey) return secretPrivateKey;
+  return readFile(privateAttestationKeyPath, "utf8");
+}
+
 const driveIdentityPatterns = [
   {
     label: "Google Drive file identity",
@@ -188,6 +195,19 @@ const sensitiveCredentialPatterns = [
   {
     label: "OpenAI API key",
     expression: /\bsk-[A-Za-z0-9_-]{20,}\b/
+  },
+  {
+    label: "Supabase secret API key",
+    expression: /\bsb_secret_[A-Za-z0-9_-]{20,}\b/
+  },
+  {
+    label: "JSON web token",
+    expression:
+      /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/
+  },
+  {
+    label: "Google OAuth access token",
+    expression: /\bya29\.[A-Za-z0-9_-]{20,}\b/
   }
 ];
 
@@ -677,7 +697,7 @@ async function main() {
   if (shouldWriteAttestation) {
     const attestationText = `${JSON.stringify(attestation, null, 2)}\n`;
     const [privateKey, publicKey] = await Promise.all([
-      readFile(privateAttestationKeyPath, "utf8"),
+      loadPrivateAttestationKey(),
       readFile(publicAttestationKeyPath, "utf8")
     ]);
     const attestationSignature = sign(

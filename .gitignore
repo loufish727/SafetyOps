@@ -7,4 +7,5 @@ debug.log
 .env.*
 !*.example
 supabase-config.local.js
+supabase/.temp/
 private/

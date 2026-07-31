@@ -20,16 +20,17 @@ flowchart LR
 ```
 
 This is the target architecture represented by source. The public shell has an
-exact signed release process, but no current evidence shows that migrations
-`001` through `010` or the Edge Function are installed and exercised in a
-SafetyOps Supabase project. Database and Edge behavior is therefore
-**DESIGNED/UNPROVEN**.
+exact signed release process. The hosted migration ledger is aligned through
+`012`, and `010` through `012` compiled and applied in the final compatibility
+sequence on 2026-07-31. That ledger does not prove historical file checksums.
+Catalog, cross-role, tenant-isolation, Storage, Edge Function, and full workflow
+behavior remain separately unproven.
 
 ## Public layer
 
 - `index.html`, `styles.css`, and `app.js` form the static application.
-- `supabase-config.js` is public by design and currently has empty URL/key
-  values. It may contain only a Supabase project URL and publishable/anon key.
+- `supabase-config.js` is public by design and contains only the dedicated
+  project URL and its publishable key.
 - Persistent Supabase sessions remain disabled on the shared account-level
   `github.io` origin. Enabling them requires a dedicated custom domain and
   corresponding Auth/Edge origin allowlists.
@@ -97,11 +98,11 @@ Migrations must be applied in filename order:
    private object metadata, audit, and RLS.
 4. `202607300004_form_originals.sql`: immutable original/template file links,
    service-controlled upload sessions, metadata authorization, and file RLS.
-5. `202607300005_company_onboarding.sql`: earlier atomic company onboarding
-   revision retained in migration history.
-6. `202607300006_state_jurisdiction_onboarding.sql`: OR/WA/CA seeds and
-   four-argument company onboarding with a draft, review-required location
-   profile.
+5. `202607300005_company_onboarding.sql`: historical atomic company onboarding
+   revision retained in migration history and retired by migration `011`.
+6. `202607300006_state_jurisdiction_onboarding.sql`: OR/WA/CA seeds and the
+   historical four-argument company onboarding revision, retired by migration
+   `011`.
 7. `202607300007_form_file_access_ledger.sql`: service-only allow/deny events
    for signed form-file access.
 8. `202607300008_company_location_onboarding.sql`: authorized additional
@@ -121,11 +122,22 @@ Migrations must be applied in filename order:
     profile/JWT context, company role, method from the pinned field type, intent
     from its label, timestamp, unsigned-payload digest, canonical signature
     record, and signature hash.
+11. `202607310011_auth_and_tenant_integrity.sql`: service-only invite-owner
+    bootstrap with system provenance; retirement of both browser onboarding
+    overloads; one-active-company, attributable membership audit, and
+    last-administrator invariants; state-aware location enforcement; corrected
+     profile supersession; database-derived jurisdiction review; and
+     resolved-jurisdiction profile/program gating.
+12. `202607310012_pgcrypto_schema_compatibility.sql`: hosted-Supabase pgcrypto
+    namespace compatibility and original-search-path-preserving repair for
+    hash-dependent functions installed by migrations `002` through `009`.
 
 The critical intended boundaries are `private.is_company_member`,
 `private.can_manage_company`, `private.can_access_location`, RLS policies,
 foreign keys that repeat `company_id`, and pinned `search_path` values on
-security-definer functions. These are DESIGNED, not runtime-proven.
+security-definer functions. Hosted version-ledger alignment and the final
+`010`–`012` compatibility application are proven; exact legacy file identity
+and the complete runtime role and tenant-denial matrix are not.
 
 ## Private file boundary
 
@@ -160,7 +172,8 @@ layer is an LFES or regulatory compliance certification.
 
 ## Open architecture boundaries
 
-- no applied SafetyOps database or clean local PostgreSQL migration build;
+- no clean local PostgreSQL replay, applied-file checksum proof for legacy
+  versions, or hosted catalog assertion suite;
 - no hosted cross-company, cross-location, or role denial tests;
 - no deployed Edge Function, source ingestion, malware scanner, scheduler, or
   change-monitoring worker;

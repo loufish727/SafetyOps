@@ -2,7 +2,7 @@
 -- Designed for one company with multiple locations while preserving tenant
 -- isolation for future companies. Apply through the Supabase CLI or SQL editor.
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 create schema if not exists private;
 
 revoke all on schema private from public;

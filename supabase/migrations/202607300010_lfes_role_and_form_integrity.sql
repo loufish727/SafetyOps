@@ -5,7 +5,7 @@
 -- revalidates program applicability on final form submission, and derives all
 -- signature/submission evidence digests from server-owned records.
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- ---------------------------------------------------------------------------
 -- Personnel visibility without recursive RLS evaluation
@@ -1064,7 +1064,7 @@ security definer
 set search_path = public, program_private, pg_temp
 as $$
   select encode(
-    digest(
+    extensions.digest(
       convert_to(
         program_private.form_unsigned_evidence_manifest(
           target_submission_id
@@ -1293,7 +1293,7 @@ begin
     )
   );
   new.signature_sha256 := encode(
-    digest(convert_to(new.signature_record::text, 'UTF8'), 'sha256'),
+    extensions.digest(convert_to(new.signature_record::text, 'UTF8'), 'sha256'),
     'hex'
   );
 
@@ -1424,7 +1424,7 @@ begin
     final_manifest :=
       program_private.form_final_evidence_manifest(new.id);
     new.submitted_payload_sha256 := encode(
-      digest(convert_to(final_manifest::text, 'UTF8'), 'sha256'),
+      extensions.digest(convert_to(final_manifest::text, 'UTF8'), 'sha256'),
       'hex'
     );
   end if;
@@ -1472,7 +1472,7 @@ begin
         )
       );
     new.submitted_payload_sha256 := encode(
-      digest(convert_to(final_manifest::text, 'UTF8'), 'sha256'),
+      extensions.digest(convert_to(final_manifest::text, 'UTF8'), 'sha256'),
       'hex'
     );
   end if;

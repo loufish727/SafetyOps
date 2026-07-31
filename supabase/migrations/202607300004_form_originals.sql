@@ -8,7 +8,7 @@
 -- narrow Edge Function prepares signed uploads, scans and verifies the bytes,
 -- then commits immutable source/object metadata and the exact template link.
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- The bucket remains nonpublic and service-controlled. This allowlist covers
 -- canonical forms plus the derived artifact kinds supported by the Drive
@@ -534,7 +534,7 @@ begin
           and file_link.is_primary
       )::integer,
       encode(
-        digest(
+        extensions.digest(
           coalesce(
             string_agg(
               concat_ws(

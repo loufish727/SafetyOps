@@ -90,3 +90,27 @@ test("company administrator creates a location through the tenant-safe RPC", asy
     location_timezone: "America/Los_Angeles"
   });
 });
+
+test("Oregon administrator can submit the canonical Boise timezone", async ({ page }, testInfo) => {
+  await configureAuthenticatedWorkspace(page);
+  await page.goto("/");
+
+  await openWorkspaceView(page, testInfo.project.name, "locations", "Locations");
+  await page.getByRole("button", { name: "Add location" }).click();
+  await page.getByLabel("Location name").fill("Oregon Mountain Test Site");
+  await page.getByLabel("Location code").fill("OR-MT");
+  await page.getByLabel("Address or city").fill("Oregon");
+  await page.getByLabel("State-plan starting point").selectOption("OR");
+  await page.getByLabel("Timezone").selectOption("America/Boise");
+  await page.getByRole("button", { name: "Create location" }).click();
+
+  const rpcCall = await page.evaluate(() =>
+    window.__safetyOpsFakeDb.calls.find((call) => call.name === "create_company_location")
+  );
+  expect(rpcCall.payload).toMatchObject({
+    location_name: "Oregon Mountain Test Site",
+    location_code: "OR-MT",
+    state_code: "OR",
+    location_timezone: "America/Boise"
+  });
+});

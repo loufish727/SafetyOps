@@ -28,6 +28,44 @@
     looseResources: []
   };
   const uiStoragePrefix = "safetyops.ui.";
+  const authHashParameters = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const authQueryParameters = new URLSearchParams(window.location.search);
+  const authQueryFlowHint = ["invite", "recovery"].includes(authQueryParameters.get("auth"))
+    ? authQueryParameters.get("auth")
+    : null;
+  const authHashFlowHint = ["invite", "recovery"].includes(authHashParameters.get("type"))
+    ? authHashParameters.get("type")
+    : null;
+  const hasImplicitAuthCallbackEvidence = Boolean(
+    authHashParameters.get("access_token")
+    && authHashParameters.get("refresh_token")
+  );
+  const hasPkceAuthCallbackEvidence = Boolean(
+    authQueryParameters.get("code")
+    && authQueryFlowHint
+  );
+  const hasAuthCallbackErrorEvidence = Boolean(
+    authHashParameters.get("error")
+    || authHashParameters.get("error_code")
+    || authQueryParameters.get("error")
+    || authQueryParameters.get("error_code")
+  );
+  const attemptedAuthCallbackFlow = (
+    hasImplicitAuthCallbackEvidence
+      ? authHashFlowHint || authQueryFlowHint
+      : hasPkceAuthCallbackEvidence
+        ? authQueryFlowHint
+        : hasAuthCallbackErrorEvidence
+          ? authHashFlowHint || authQueryFlowHint
+          : null
+  );
+  const publicSignupEnabled = window.SAFETYOPS_ALLOW_PUBLIC_SIGNUP === true;
+  const hasRequiredPasswordClasses = (password) => (
+    /[a-z]/.test(password)
+    && /[A-Z]/.test(password)
+    && /[0-9]/.test(password)
+    && /[^A-Za-z0-9\s]/.test(password)
+  );
 
   const state = {
     view: localStorage.getItem(`${uiStoragePrefix}view`) || "dashboard",
@@ -52,6 +90,7 @@
     selectedTemplateId: null,
     authStatus: "configuration-required",
     authMode: "sign-in",
+    authFlow: null,
     authUser: null,
     authMessage: "",
     authBusy: false
@@ -90,6 +129,12 @@
 
   let supabaseClient = null;
   let referenceReturnFocus = null;
+  let pendingAuthCallbackFlow = attemptedAuthCallbackFlow;
+  let authCallbackRejected = false;
+  let authTransitionEpoch = 0;
+  let workspaceLoadSequence = 0;
+  let synchronizedAuthSessionKey = null;
+  let synchronizedAuthSessionPromise = null;
   if (hasSupabaseConfig) {
     try {
       supabaseClient = window.supabase.createClient(
@@ -735,46 +780,66 @@
         <button class="button primary auth-submit" type="button" data-action="retry-workspace">Retry workspace</button>
         <button class="button auth-submit" type="button" data-action="auth-sign-out">Sign out</button>
       `;
-    } else if (state.authStatus === "needs-company") {
+    } else if (state.authStatus === "provisioning-pending") {
       content = `
         <div class="auth-card-heading">
-          <span class="auth-step">Company setup</span>
-          <h2>Create your SafetyOps company</h2>
-          <p>This creates an isolated tenant, makes you its corporate administrator, and adds a private Main location.</p>
+          <span class="auth-step">Provisioning pending</span>
+          <h2>Your company access is being prepared</h2>
+          <p>${escapeHtml(state.authUser?.email || "This invited account")} is authenticated, but it does not yet have an active SafetyOps company membership.</p>
         </div>
         ${message}
-        <form id="company-onboarding-form" class="auth-form">
-          <label for="onboarding-company-name">Company name</label>
-          <input id="onboarding-company-name" name="company_name" autocomplete="organization" minlength="2" maxlength="160" required placeholder="Example Manufacturing">
-          <label for="onboarding-location-name">First location name</label>
-          <input id="onboarding-location-name" name="location_name" minlength="2" maxlength="160" required placeholder="Main facility">
-          <label for="onboarding-state">Location state</label>
-          <select id="onboarding-state" name="state_code" required>
-            <option value="">Select the controlling state program</option>
-            <option value="OR">Oregon · Oregon OSHA</option>
-            <option value="WA">Washington · DOSH</option>
-            <option value="CA">California · Cal/OSHA</option>
-          </select>
-          <div class="auth-boundary-note">
-            <strong>Private and location-aware</strong>
-            <span>Supabase isolates every company row and file. The state selection creates a draft jurisdiction profile that must be reviewed before SafetyOps treats any rule as a compliance conclusion. GitHub receives no tenant data.</span>
-          </div>
-          <button class="button primary auth-submit" type="submit" ${state.authBusy ? "disabled" : ""}>${state.authBusy ? "Creating company…" : "Create company"}</button>
-          <button class="button auth-submit" type="button" data-action="auth-sign-out">Sign out</button>
+        <div class="auth-boundary-note">
+          <strong>An administrator must finish provisioning</strong>
+          <span>The company, locations, owner role, and regulatory-review records are created through the protected administrator workflow. This browser cannot create or join a tenant by itself.</span>
+        </div>
+        <button class="button primary auth-submit" type="button" data-action="retry-workspace">Check again</button>
+        <button class="button auth-submit" type="button" data-action="auth-sign-out">Sign out</button>
+      `;
+    } else if (state.authStatus === "password-setup") {
+      content = `
+        <div class="auth-card-heading">
+          <span class="auth-step">Secure account activation</span>
+          <h2>${state.authFlow === "recovery" ? "Choose a new password" : "Finish your invitation"}</h2>
+          <p>Set a private password for ${escapeHtml(state.authUser?.email || "this account")}. SafetyOps never sends or stores it in GitHub.</p>
+        </div>
+        ${message}
+        <form id="auth-password-setup-form" class="auth-form">
+           <label for="auth-new-password">New password</label>
+           <input id="auth-new-password" name="password" type="password" autocomplete="new-password" minlength="12" required>
+          <p class="field-hint">Use at least 12 characters with lowercase, uppercase, a number, and a symbol.</p>
+           <label for="auth-confirm-password">Confirm new password</label>
+          <input id="auth-confirm-password" name="confirm_password" type="password" autocomplete="new-password" minlength="12" required>
+          <button class="button primary auth-submit" type="submit" ${state.authBusy ? "disabled" : ""}>${state.authBusy ? "Securing account..." : "Set password and continue"}</button>
+          <button class="button auth-submit" type="button" data-action="auth-sign-out">Cancel and sign out</button>
+        </form>
+      `;
+    } else if (state.authMode === "recovery") {
+      content = `
+        <div class="auth-card-heading">
+          <span class="auth-step">Account recovery</span>
+          <h2>Reset your password</h2>
+          <p>Enter your invited email address. If it is registered, Supabase will send a secure recovery link.</p>
+        </div>
+        ${message}
+        <form id="auth-recovery-form" class="auth-form">
+          <label for="auth-recovery-email">Email</label>
+          <input id="auth-recovery-email" name="email" type="email" autocomplete="email" required>
+          <button class="button primary auth-submit" type="submit" ${state.authBusy ? "disabled" : ""}>${state.authBusy ? "Sending..." : "Send recovery link"}</button>
+          <button class="button auth-submit" type="button" data-action="auth-mode" data-mode="sign-in">Back to sign in</button>
         </form>
       `;
     } else {
-      const signingUp = state.authMode === "sign-up";
+      const signingUp = publicSignupEnabled && state.authMode === "sign-up";
       content = `
         <div class="auth-card-heading">
           <span class="auth-step">Secure company access</span>
           <h2>${signingUp ? "Create your account" : "Welcome back"}</h2>
-          <p>${signingUp ? "Start a new company workspace or join one by invitation." : "Sign in to your private company safety workspace."}</p>
+          <p>${signingUp ? "Create a confirmed account for an approved deployment." : "Sign in to your private company safety workspace."}</p>
         </div>
-        <div class="tabs auth-tabs" role="tablist" aria-label="Account access">
+        ${publicSignupEnabled ? `<div class="tabs auth-tabs" role="tablist" aria-label="Account access">
           <button class="tab ${!signingUp ? "active" : ""}" type="button" role="tab" aria-selected="${!signingUp}" data-action="auth-mode" data-mode="sign-in">Sign in</button>
           <button class="tab ${signingUp ? "active" : ""}" type="button" role="tab" aria-selected="${signingUp}" data-action="auth-mode" data-mode="sign-up">Create account</button>
-        </div>
+        </div>` : ""}
         ${message}
         <form id="${signingUp ? "auth-signup-form" : "auth-signin-form"}" class="auth-form">
           ${signingUp ? `
@@ -784,9 +849,10 @@
           <label for="auth-email">Email</label>
           <input id="auth-email" name="email" type="email" autocomplete="email" required>
           <label for="auth-password">Password</label>
-          <input id="auth-password" name="password" type="password" autocomplete="${signingUp ? "new-password" : "current-password"}" minlength="8" required>
+          <input id="auth-password" name="password" type="password" autocomplete="${signingUp ? "new-password" : "current-password"}" minlength="12" required>
           <button class="button primary auth-submit" type="submit" ${state.authBusy ? "disabled" : ""}>${state.authBusy ? "Please wait…" : signingUp ? "Create secure account" : "Sign in"}</button>
         </form>
+        ${!signingUp ? `<button class="button auth-submit" type="button" data-action="auth-mode" data-mode="recovery">Forgot password?</button>` : ""}
         <p class="auth-legal">The browser receives only a publishable Supabase key. Database policies—not the UI—enforce company and location access.</p>
       `;
     }
@@ -882,7 +948,14 @@
     state.localFormUploads = [];
   }
 
-  async function loadAuthenticatedWorkspace(user) {
+  async function loadAuthenticatedWorkspace(user, transitionEpoch = authTransitionEpoch) {
+    const requestSequence = ++workspaceLoadSequence;
+    const isCurrentRequest = () => (
+      transitionEpoch === authTransitionEpoch
+      && requestSequence === workspaceLoadSequence
+      && state.authUser?.id === user.id
+    );
+    if (!isCurrentRequest()) return;
     try {
       const membershipResult = await supabaseClient
         .from("company_memberships")
@@ -892,12 +965,13 @@
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
+      if (!isCurrentRequest()) return;
       if (membershipResult.error) throw membershipResult.error;
 
       if (!membershipResult.data) {
         purgeTenantWorkspace();
         state.authUser = user;
-        state.authStatus = "needs-company";
+        state.authStatus = "provisioning-pending";
         state.authBusy = false;
         render();
         return;
@@ -1089,6 +1163,7 @@
           .eq("company_id", membership.company_id)
           .limit(1000)
       ]);
+      if (!isCurrentRequest()) return;
       const failedResult = [
         companyResult,
         locationsResult,
@@ -1819,12 +1894,16 @@
       state.authBusy = false;
       try {
         if (!localUploadStagingEnabled) return render();
-        state.localFormUploads = await listLocalFormUploads();
+        const localFormUploads = await listLocalFormUploads();
+        if (!isCurrentRequest()) return;
+        state.localFormUploads = localFormUploads;
       } catch (_error) {
+        if (!isCurrentRequest()) return;
         state.localFormUploads = [];
       }
       render();
     } catch (error) {
+      if (!isCurrentRequest()) return;
       purgeTenantWorkspace();
       state.authUser = user;
       state.authStatus = "workspace-error";
@@ -1834,10 +1913,17 @@
     }
   }
 
-  async function applyAuthSession(session) {
+  async function applyAuthSession(session, transitionEpoch) {
+    if (transitionEpoch !== authTransitionEpoch) return;
     if (!session?.user) {
       const previousCompanyId = data.company?.id;
       const previousUserId = state.authUser?.id;
+      purgeTenantWorkspace();
+      state.authUser = null;
+      state.localFormUploads = [];
+      state.authStatus = "signed-out";
+      state.authBusy = false;
+      render();
       if (previousCompanyId && previousUserId) {
         try {
           await clearLocalFormUploads(previousCompanyId, previousUserId);
@@ -1845,33 +1931,147 @@
           // Local staging is best-effort and never the system of record.
         }
       }
+      return;
+    }
+    if (state.authUser?.id && state.authUser.id !== session.user.id) {
       purgeTenantWorkspace();
-      state.authUser = null;
-      state.localFormUploads = [];
-      state.authStatus = "signed-out";
+    }
+    state.authUser = session.user;
+    if (["invite", "recovery"].includes(state.authFlow)) {
+      purgeTenantWorkspace();
+      state.authUser = session.user;
+      state.authStatus = "password-setup";
       state.authBusy = false;
       render();
       return;
     }
-    state.authUser = session.user;
     state.authStatus = "loading";
     state.authBusy = false;
     render();
-    await loadAuthenticatedWorkspace(session.user);
+    await loadAuthenticatedWorkspace(session.user, transitionEpoch);
+  }
+
+  function authSessionKey(session) {
+    if (!session?.user) return "signed-out";
+    return `${session.user.id}:${session.access_token || "session"}`;
+  }
+
+  function invalidateAuthTransition() {
+    authTransitionEpoch += 1;
+    workspaceLoadSequence += 1;
+    synchronizedAuthSessionKey = null;
+    synchronizedAuthSessionPromise = null;
+  }
+
+  function synchronizeAuthSession(session, options = {}) {
+    const key = authSessionKey(session);
+    if (!options.force && synchronizedAuthSessionKey === key && synchronizedAuthSessionPromise) {
+      return synchronizedAuthSessionPromise;
+    }
+    authTransitionEpoch += 1;
+    workspaceLoadSequence += 1;
+    const transitionEpoch = authTransitionEpoch;
+    synchronizedAuthSessionKey = key;
+    synchronizedAuthSessionPromise = applyAuthSession(session, transitionEpoch);
+    return synchronizedAuthSessionPromise;
+  }
+
+  function authRedirectUrl(flow) {
+    const url = new URL(window.location.href);
+    url.hash = "";
+    url.searchParams.set("auth", flow);
+    return url.toString();
+  }
+
+  function clearAuthFlowUrl() {
+    const url = new URL(window.location.href);
+    url.hash = "";
+    ["auth", "code", "error", "error_code", "error_description", "type"].forEach((parameter) => {
+      url.searchParams.delete(parameter);
+    });
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }
+
+  function activateVerifiedAuthFlow(event, session) {
+    if (!session?.user) return false;
+    if (event === "PASSWORD_RECOVERY") {
+      state.authFlow = "recovery";
+      pendingAuthCallbackFlow = null;
+      return true;
+    }
+    if (
+      pendingAuthCallbackFlow
+      && ["INITIAL_SESSION", "SIGNED_IN"].includes(event)
+    ) {
+      state.authFlow = pendingAuthCallbackFlow;
+      pendingAuthCallbackFlow = null;
+      return true;
+    }
+    return false;
+  }
+
+  function rejectAuthCallback(flow) {
+    authCallbackRejected = true;
+    pendingAuthCallbackFlow = null;
+    invalidateAuthTransition();
+    purgeTenantWorkspace();
+    state.authFlow = null;
+    state.authUser = null;
+    state.authStatus = "signed-out";
+    state.authMode = flow === "recovery" ? "recovery" : "sign-in";
+    state.authMessage = flow === "recovery"
+      ? "This password-recovery link is invalid or expired. Request a new recovery link."
+      : "This invitation link is invalid or expired. Ask your SafetyOps administrator for a new invitation.";
+    state.authBusy = false;
+    clearAuthFlowUrl();
+    render();
   }
 
   async function initializeAuth() {
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      const activatedFlow = activateVerifiedAuthFlow(event, session);
+      if (activatedFlow || authSessionKey(session) !== synchronizedAuthSessionKey) {
+        // Invalidate in the callback's synchronous phase. Supabase recommends
+        // deferring API work from this callback, but an old tenant request must
+        // lose commit authority as soon as a new auth event is observed.
+        invalidateAuthTransition();
+      }
+      if (event === "SIGNED_OUT") {
+        state.authFlow = null;
+        pendingAuthCallbackFlow = null;
+        clearAuthFlowUrl();
+      }
+      window.setTimeout(() => {
+        if (authCallbackRejected) return;
+        synchronizeAuthSession(session, { force: activatedFlow });
+      }, 0);
+    });
+
+    const initializationResult = typeof supabaseClient.auth.initialize === "function"
+      ? await supabaseClient.auth.initialize()
+      : { error: null };
+    if (initializationResult?.error && attemptedAuthCallbackFlow) {
+      rejectAuthCallback(attemptedAuthCallbackFlow);
+      return;
+    }
+
     const sessionResult = await supabaseClient.auth.getSession();
     if (sessionResult.error) {
+      if (attemptedAuthCallbackFlow) {
+        rejectAuthCallback(attemptedAuthCallbackFlow);
+        return;
+      }
       state.authStatus = "signed-out";
       state.authMessage = sessionResult.error.message;
       render();
-    } else {
-      await applyAuthSession(sessionResult.data.session);
+      return;
     }
-    supabaseClient.auth.onAuthStateChange((_event, session) => {
-      window.setTimeout(() => applyAuthSession(session), 0);
-    });
+    if (attemptedAuthCallbackFlow && !sessionResult.data.session) {
+      rejectAuthCallback(attemptedAuthCallbackFlow);
+      return;
+    }
+    const activatedFlow = activateVerifiedAuthFlow("INITIAL_SESSION", sessionResult.data.session);
+    await synchronizeAuthSession(sessionResult.data.session, { force: activatedFlow });
   }
 
   async function handleAuthSubmit(form) {
@@ -1881,25 +2081,34 @@
     render();
     try {
       if (form.id === "auth-signin-form") {
+        authCallbackRejected = false;
+        pendingAuthCallbackFlow = null;
+        state.authFlow = null;
+        clearAuthFlowUrl();
         const result = await supabaseClient.auth.signInWithPassword({
           email: String(formData.get("email") || "").trim(),
           password: String(formData.get("password") || "")
         });
         if (result.error) throw result.error;
-        await applyAuthSession(result.data.session);
+        await synchronizeAuthSession(result.data.session);
         return;
+      }
+
+      if (!publicSignupEnabled) {
+        throw new Error("Account creation is invite-only. Ask a SafetyOps administrator for access.");
       }
 
       const result = await supabaseClient.auth.signUp({
         email: String(formData.get("email") || "").trim(),
         password: String(formData.get("password") || ""),
         options: {
-          data: { full_name: String(formData.get("full_name") || "").trim() }
+          data: { full_name: String(formData.get("full_name") || "").trim() },
+          emailRedirectTo: authRedirectUrl("invite")
         }
       });
       if (result.error) throw result.error;
       if (result.data.session) {
-        await applyAuthSession(result.data.session);
+        await synchronizeAuthSession(result.data.session);
       } else {
         state.authStatus = "signed-out";
         state.authMode = "sign-in";
@@ -1915,35 +2124,58 @@
     }
   }
 
-  async function handleCompanyOnboarding(form) {
+  async function handleRecoveryRequest(form) {
     const formData = new FormData(form);
-    const companyName = String(formData.get("company_name") || "").trim();
-    const firstLocationName = String(formData.get("location_name") || "").trim();
-    const firstStateCode = String(formData.get("state_code") || "").trim().toUpperCase();
-    const slugBase = companyName
-      .toLowerCase()
-      .normalize("NFKD")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 42) || "company";
-    const suffix = window.crypto.randomUUID
-      ? window.crypto.randomUUID().slice(0, 8)
-      : Date.now().toString(36);
     state.authBusy = true;
     state.authMessage = "";
     render();
     try {
-      const result = await supabaseClient.rpc("create_company_with_owner", {
-        company_name: companyName,
-        company_slug: `${slugBase}-${suffix}`,
-        first_location_name: firstLocationName,
-        first_state_code: firstStateCode
-      });
+      const result = await supabaseClient.auth.resetPasswordForEmail(
+        String(formData.get("email") || "").trim(),
+        { redirectTo: authRedirectUrl("recovery") }
+      );
       if (result.error) throw result.error;
-      await loadAuthenticatedWorkspace(state.authUser);
+      state.authStatus = "signed-out";
+      state.authMode = "sign-in";
+      state.authMessage = "If that invited account exists, a recovery link has been sent.";
+      state.authBusy = false;
+      render();
     } catch (error) {
-      state.authStatus = "needs-company";
-      state.authMessage = error?.message || "The company workspace could not be created.";
+      state.authStatus = "signed-out";
+      state.authMode = "sign-in";
+      // Keep recovery responses indistinguishable so account existence and
+      // provider details cannot be inferred from the UI.
+      state.authMessage = "If that invited account exists, a recovery link has been sent.";
+      state.authBusy = false;
+      render();
+    }
+  }
+
+  async function handlePasswordSetup(form) {
+    const formData = new FormData(form);
+    const password = String(formData.get("password") || "");
+    const confirmation = String(formData.get("confirm_password") || "");
+    if (password.length < 12 || !hasRequiredPasswordClasses(password) || password !== confirmation) {
+      state.authMessage = password.length < 12 || !hasRequiredPasswordClasses(password)
+        ? "Use at least 12 characters with lowercase, uppercase, a number, and a symbol."
+        : "The passwords do not match.";
+      render();
+      return;
+    }
+    state.authBusy = true;
+    state.authMessage = "";
+    render();
+    try {
+      const updateResult = await supabaseClient.auth.updateUser({ password });
+      if (updateResult.error) throw updateResult.error;
+      state.authFlow = null;
+      clearAuthFlowUrl();
+      const sessionResult = await supabaseClient.auth.getSession();
+      if (sessionResult.error) throw sessionResult.error;
+      await synchronizeAuthSession(sessionResult.data.session, { force: true });
+    } catch (error) {
+      state.authStatus = "password-setup";
+      state.authMessage = error?.message || "The password could not be set.";
       state.authBusy = false;
       render();
     }
@@ -1955,6 +2187,18 @@
       return;
     }
     const formData = new FormData(form);
+    const stateCode = String(formData.get("state_code") || "").trim().toUpperCase();
+    const locationTimezone = String(
+      formData.get("timezone") || "America/Los_Angeles"
+    );
+    if (["WA", "CA"].includes(stateCode)
+        && locationTimezone !== "America/Los_Angeles") {
+      showToast(
+        "Location was not created",
+        "Washington and California locations must use Pacific time."
+      );
+      return;
+    }
     const submitButton = form.querySelector('button[type="submit"]');
     if (submitButton) {
       submitButton.disabled = true;
@@ -1965,9 +2209,9 @@
         target_company_id: data.company.id,
         location_name: String(formData.get("name") || "").trim(),
         location_code: String(formData.get("code") || "").trim(),
-        state_code: String(formData.get("state_code") || "").trim().toUpperCase(),
+        state_code: stateCode,
         location_address: String(formData.get("address") || "").trim() || null,
-        location_timezone: String(formData.get("timezone") || "America/Los_Angeles")
+        location_timezone: locationTimezone
       });
       if (result.error) throw result.error;
       const newLocationId = result.data;
@@ -2003,7 +2247,10 @@
       render();
       return;
     }
-    await applyAuthSession(null);
+    state.authFlow = null;
+    pendingAuthCallbackFlow = null;
+    clearAuthFlowUrl();
+    await synchronizeAuthSession(null, { force: true });
   }
 
   function navItem(item) {
@@ -4445,7 +4692,7 @@
                   <label for="location-create-timezone">Timezone</label>
                   <select id="location-create-timezone" name="timezone" required>
                     <option value="America/Los_Angeles">Pacific time</option>
-                    <option value="America/Denver">Mountain time</option>
+                    <option value="America/Boise">Mountain time (Oregon only)</option>
                   </select>
                 </div>
               </div>
@@ -5163,7 +5410,12 @@
     const action = target.dataset.action;
 
     if (action === "auth-mode") {
-      state.authMode = target.dataset.mode === "sign-up" ? "sign-up" : "sign-in";
+      const requestedMode = target.dataset.mode;
+      state.authMode = requestedMode === "recovery"
+        ? "recovery"
+        : requestedMode === "sign-up" && publicSignupEnabled
+          ? "sign-up"
+          : "sign-in";
       state.authMessage = "";
       render();
       return;
@@ -5404,6 +5656,16 @@
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.id === "location-create-state") {
+      const timezoneSelect = document.querySelector("#location-create-timezone");
+      const boiseOption = timezoneSelect?.querySelector('option[value="America/Boise"]');
+      const allowsOregonMountainTime = event.target.value === "OR";
+      if (boiseOption) boiseOption.disabled = !allowsOregonMountainTime;
+      if (!allowsOregonMountainTime && timezoneSelect?.value === "America/Boise") {
+        timezoneSelect.value = "America/Los_Angeles";
+      }
+      return;
+    }
     if (event.target.id === "form-upload-file") {
       const titleInput = document.querySelector("#form-upload-title-input");
       const selectedFile = event.target.files?.[0];
@@ -5454,9 +5716,15 @@
       return;
     }
 
-    if (event.target.id === "company-onboarding-form") {
+    if (event.target.id === "auth-recovery-form") {
       event.preventDefault();
-      handleCompanyOnboarding(event.target);
+      handleRecoveryRequest(event.target);
+      return;
+    }
+
+    if (event.target.id === "auth-password-setup-form") {
+      event.preventDefault();
+      handlePasswordSetup(event.target);
       return;
     }
 

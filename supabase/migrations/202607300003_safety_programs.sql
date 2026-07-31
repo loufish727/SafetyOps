@@ -10,7 +10,7 @@
 --   * every regulatory claim pinned to an exact requirement and/or source-text
 --     version created by 202607300002_regulatory_traceability.sql.
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 create schema if not exists program_private;
 
 revoke all on schema program_private from public, anon, authenticated;
@@ -1828,7 +1828,7 @@ begin
     'field_sha256', field_record.field_sha256
   );
   new.answer_sha256 := encode(
-    digest(
+    extensions.digest(
       concat_ws(
         '|',
         new.submission_id::text,
@@ -2029,11 +2029,11 @@ declare
 begin
   before_hash := case
     when before_record is null then null
-    else encode(digest(before_record::text, 'sha256'), 'hex')
+    else encode(extensions.digest(before_record::text, 'sha256'), 'hex')
   end;
   after_hash := case
     when after_record is null then null
-    else encode(digest(after_record::text, 'sha256'), 'hex')
+    else encode(extensions.digest(after_record::text, 'sha256'), 'hex')
   end;
 
   if tg_op = 'UPDATE' then
@@ -2068,7 +2068,7 @@ begin
   end;
 
   event_hash := encode(
-    digest(
+    extensions.digest(
       concat_ws(
         '|',
         event_company_id::text,

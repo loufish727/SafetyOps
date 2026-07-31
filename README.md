@@ -4,12 +4,12 @@ SafetyOps is a multi-tenant application foundation for workplace safety operatio
 
 The public application starts empty. It does not ship a fictional company, locations, workers, incidents, inspections, training records, documents, or tenant control mappings. GitHub Pages hosts the application shell and public regulatory reference metadata; authorized company records and private files belong in Supabase.
 
-The browser implementation, ten ordered migrations, and one controlled-download Edge Function exist in source. The database controls and Edge behavior remain **DESIGNED/UNPROVEN** until migrations `001` through `010` are applied and tested in a dedicated SafetyOps Supabase project. A hosted release may therefore be an honest connection-required shell without being ready for production tenant operation.
+The browser implementation, twelve ordered migrations, and one controlled-download Edge Function exist in source. The dedicated hosted SafetyOps project has aligned migration-ledger history through `012`; migrations `010` through `012` compiled and applied in the final compatibility sequence on 2026-07-31. Migration `012` reconciles the hosted pgcrypto function paths created by earlier versions. Supabase migration history does not prove checksum identity for previously applied files, and the hosted role matrix, Storage, Edge Function, upload pipeline, and regulatory review still require separate proof before broad production use.
 
 ## Current source implementation
 
-- Supabase email/password authentication and company membership bootstrap
-- Atomic first-company onboarding with a named first location
+- Invite-only Supabase email/password authentication, password setup/recovery, and company membership bootstrap
+- Administrator-controlled first-company and initial-location provisioning
 - Tenant-safe creation of additional locations
 - Company- and location-scoped operational views
 - Safety-program and source-derived digital-form data models
@@ -21,9 +21,10 @@ The browser implementation, ten ordered migrations, and one controlled-download 
 - Location regulatory profiles, jurisdiction assignments, applicability assessments, approved control mappings, and evidence lineage
 - Idempotent database-side inspection submission with immutable regulatory context; draft or review-required profiles degrade to `review_required` with zero compliance-evidence links
 - Database-authoritative auditor, personnel-visibility, inspection-identity, active-membership, current-applicability, signature, and final form-evidence controls in migration `010`; the browser supplies only pinned signature entity IDs while PostgreSQL derives signer identity/role, method, intent, timestamp, unsigned-payload digest, signature record, and signature hash
+- Service-only invite-owner bootstrap, retirement of both browser self-onboarding RPCs, single-active-company membership, attributable membership audit, last-administrator protection, state-aware location creation, database-derived jurisdiction review, and resolved-jurisdiction program gating in migration `011`
 - Row Level Security, immutable version records, append-only audit records, and private Storage design
 - Bounded browser queries, with explicit server pagination still required before large-scale use
-- Responsive desktop/mobile interface; the latest full local Playwright run completed with 39 passed, 7 conditional/project skips, and 0 failures
+- Responsive desktop/mobile interface; the latest full local Playwright run completed with 67 passed, 7 conditional/project skips, and 0 failures
 - GitHub Pages build and deployment workflow
 
 Some administrative workflows remain intentionally unavailable until their server-side services are deployed. In particular, SafetyOps does **not** yet provide a production form-original upload service. The checked-in `sign-form-file` Edge Function authorizes downloads of already committed, verified files; it is not an upload, quarantine, malware-scan, or commit service. Development-only local upload staging is disabled by default and is never the production system of record.
@@ -87,7 +88,7 @@ npm run sync:osha
 
 Use a separate Supabase project for SafetyOps:
 
-1. Apply every SQL file in `supabase/migrations/` in filename order, currently `202607300001` through `202607300010`. Until a clean apply and hosted role tests are recorded, treat every database behavior in this repository as design evidence only.
+1. Apply every SQL file in `supabase/migrations/` in filename order, currently `202607300001` through `202607310012`. The dedicated hosted project has migration-ledger parity through `012`, final compatibility application evidence for `010` through `012`, and no pending version. This is not a checksum assertion for earlier applied files; database behavior still requires the hosted catalog, role, and workflow tests listed in the release checklist.
 2. Deploy the controlled-download function:
 
    ```bash
@@ -99,9 +100,10 @@ Use a separate Supabase project for SafetyOps:
 
 3. Confirm the function receives the Supabase URL, anon key, and service-role key as server-side function secrets. Never copy the service-role key into browser code or GitHub Pages configuration.
 4. Add only the project URL and publishable/anon key to `supabase-config.js`.
-5. Configure the Supabase Auth Site URL and redirect allowlist for the production GitHub Pages URL and approved local development origins.
-6. Review the Storage buckets, RLS policies, function origin allowlist, and migration results before loading company data.
-7. Create or import real company records through authorized workflows. Do not seed production from ignored local fixtures.
+5. Push and verify the invite-only Auth settings in `supabase/config.toml`: exact production Site URL/redirect, public and anonymous signup disabled, email confirmation enabled, and secure password changes enabled. Enforce a server-side minimum password length of at least 12 characters and the strongest available password/leak protections in hosted Auth settings.
+6. Configure a production SMTP provider before relying on invitation or recovery email. Supabase's default sender is restricted to organization-team addresses and is not a production delivery service.
+7. Review the Storage buckets, RLS policies, function origin allowlist, Auth settings, and migration results before loading company data.
+8. Create the Auth owner through a reviewed administrator workflow, then call only the service-role bootstrap for the real company and reviewed initial-location input. Do not seed production from ignored local fixtures or attribute system provisioning to the invited owner.
 
 See `supabase/README.md` for the migration-by-migration capabilities and security requirements.
 

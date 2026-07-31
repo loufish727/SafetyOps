@@ -65,9 +65,15 @@ begin
   end if;
   if normalized_timezone not in (
     'America/Los_Angeles',
-    'America/Denver'
+    'America/Boise'
   ) then
     raise exception 'Location timezone is not supported'
+      using errcode = '22023';
+  end if;
+  if normalized_state_code in ('WA', 'CA')
+     and normalized_timezone <> 'America/Los_Angeles' then
+    raise exception 'Location timezone is inconsistent with state %',
+      normalized_state_code
       using errcode = '22023';
   end if;
 

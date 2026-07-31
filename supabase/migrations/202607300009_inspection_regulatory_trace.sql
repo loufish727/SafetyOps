@@ -382,7 +382,7 @@ begin
   end if;
 
   select encode(
-    digest(convert_to(version_value.schema_json::text, 'UTF8'), 'sha256'),
+    extensions.digest(convert_to(version_value.schema_json::text, 'UTF8'), 'sha256'),
     'hex'
   )
   into template_schema_sha256
@@ -397,11 +397,11 @@ begin
   end if;
 
   responses_sha256 := encode(
-    digest(convert_to(inspection_record.responses::text, 'UTF8'), 'sha256'),
+    extensions.digest(convert_to(inspection_record.responses::text, 'UTF8'), 'sha256'),
     'hex'
   );
   profile_sha256 := encode(
-    digest(convert_to(to_jsonb(profile_record)::text, 'UTF8'), 'sha256'),
+    extensions.digest(convert_to(to_jsonb(profile_record)::text, 'UTF8'), 'sha256'),
     'hex'
   );
 
@@ -462,7 +462,7 @@ begin
   );
 
   new.trace_sha256 := encode(
-    digest(
+    extensions.digest(
       convert_to(
         jsonb_build_object(
           'companyId', new.company_id,
@@ -740,11 +740,11 @@ begin
   end;
 
   template_schema_sha256 := encode(
-    digest(convert_to(template_record.schema_json::text, 'UTF8'), 'sha256'),
+    extensions.digest(convert_to(template_record.schema_json::text, 'UTF8'), 'sha256'),
     'hex'
   );
   submission_payload_sha256 := encode(
-    digest(
+    extensions.digest(
       convert_to(
         jsonb_build_object(
           'companyId', target_company_id,
@@ -905,7 +905,7 @@ begin
       and assignment.profile_id = profile_record.id;
 
     profile_sha256 := encode(
-      digest(convert_to(to_jsonb(profile_record)::text, 'UTF8'), 'sha256'),
+      extensions.digest(convert_to(to_jsonb(profile_record)::text, 'UTF8'), 'sha256'),
       'hex'
     );
   end if;
@@ -1253,7 +1253,7 @@ begin
     'unresolvedMappings', unresolved_details
   );
   context_sha256 := encode(
-    digest(convert_to(context_manifest::text, 'UTF8'), 'sha256'),
+    extensions.digest(convert_to(context_manifest::text, 'UTF8'), 'sha256'),
     'hex'
   );
 

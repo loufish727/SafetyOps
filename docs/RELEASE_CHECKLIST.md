@@ -17,9 +17,9 @@ the exact release revision and environment.
   excluded; matching Git-tracked paths are hard failures.
 - [x] The Supabase browser client in the signed release was locally vendored
   and digest-pinned.
-- [ ] For the next release, build `dist` from the exact release revision and
-  create a new local-denylist signature; prior approval does not carry forward.
-- [ ] Confirm `supabase-config.js` contains only the intended project URL and
+- [x] Build `dist` from this exact release candidate and create a new
+  local-denylist signature; prior approval did not carry forward.
+- [x] Confirm `supabase-config.js` contains only the intended project URL and
   publishable/anon key.
 - [ ] Publish only from the sanitized clean-history release repository; never
   push the working source repository or its prior history.
@@ -28,13 +28,13 @@ the exact release revision and environment.
 
 ## Code and browser QA — LFES-REL-001, LFES-VER-001
 
-- [x] The current Playwright run passed 39, skipped 7, and failed 0 across
+- [x] The current Playwright run passed 67, skipped 7, and failed 0 across
   desktop and mobile projects.
 - [x] The seven conditional skips were reviewed: four require private fixture
   or original-PDF evidence, and three are desktop-only mirrors of mobile
   overflow checks. They are not failures.
 - [x] The targeted program-form submission test passed on desktop and mobile.
-- [ ] Pass static checks and the complete browser suite again for the exact
+- [x] Pass static checks and the complete browser suite again for the exact
   release revision.
 - [ ] Verify configuration-required, signed-out, onboarding, empty, loading,
   error, and retry states against the intended hosted configuration.
@@ -44,8 +44,24 @@ the exact release revision and environment.
 
 ## Supabase staging — LFES-SEC-001, LFES-DB-002, LFES-DB-006
 
-- [ ] Create a dedicated non-production SafetyOps project.
-- [ ] Apply migrations `001` through `010` in filename order and retain output.
+- [x] Create a dedicated non-production SafetyOps project.
+- [x] Align hosted migration history through `012` with no pending version and
+  retain output. Migration `012` records the pgcrypto compatibility repair;
+  exact checksum identity for previously applied legacy files is not asserted.
+- [ ] Keep public Auth signup disabled; prove invitation, password setup,
+  non-enumerating recovery, one-active-company, and last-admin controls.
+- [x] Verify anonymous signup is disabled; email confirmation is enabled; the
+  Site URL and redirect allowlist are exact; hosted minimum password length is
+  12; strongest available character/leaked-password controls are on; refresh
+  rotation is enabled; and the legacy API keys are disabled.
+- [ ] Configure production SMTP before invitation or recovery mail to external,
+  non-organization recipients. The initial owner is an organization-team
+  address and can use Supabase's restricted default sender for this bootstrap.
+- [ ] Prove both historical browser company-creation RPC overloads are absent,
+  the owner bootstrap is service-only, and system provisioning is not falsely
+  attributed to the invited owner.
+- [ ] Prove jurisdiction reviewer identity/time are database-derived and a
+  manager cannot spoof review fields through direct Data API writes.
 - [ ] Verify functions compile, RLS is enabled, policies/grants exist, and each
   security-definer function has the intended owner and pinned `search_path`.
 - [ ] Verify private buckets are nonpublic and paths are company-prefixed.
