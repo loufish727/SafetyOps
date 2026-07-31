@@ -181,9 +181,10 @@ test("optional public signup preserves an explicit confirmation redirect", async
   await page.goto("/");
 
   await page.getByRole("tab", { name: "Create account" }).click();
+  await expect(page.getByLabel("Password")).toHaveAttribute("minlength", "8");
   await page.getByLabel("Full name").fill("Prototype Owner");
   await page.getByLabel("Email").fill("owner@example.test");
-  await page.getByLabel("Password").fill("Correct-Horse-Battery-Staple7!");
+  await page.getByLabel("Password").fill("Safety!!");
   await page.getByRole("button", { name: "Create secure account" }).click();
 
   await expect(page.getByText(/Account created\. Check your email/)).toBeVisible();
@@ -199,29 +200,55 @@ test("verified invite callback requires a new password before provisioning", asy
   await page.goto("/?auth=invite#access_token=invite-session&refresh_token=invite-refresh&type=invite");
 
   await expect(page.getByRole("heading", { name: "Finish your invitation" })).toBeVisible();
-  await page.getByLabel("New password", { exact: true }).fill("Correct-Horse-Battery-Staple7!");
-  await page.getByLabel("Confirm new password", { exact: true }).fill("Correct-Horse-Battery-Staple7!");
+  await page.getByLabel("New password", { exact: true }).fill("Safety!!");
+  await page.getByLabel("Confirm new password", { exact: true }).fill("Safety!!");
   await page.getByRole("button", { name: "Set password and continue" }).click();
 
   await expect(page.getByRole("heading", { name: "Your company access is being prepared" })).toBeVisible();
   const updateCall = await page.evaluate(() =>
     window.__safetyOpsAuthCalls.find((call) => call.method === "updateUser")
   );
-  expect(updateCall.payload.password).toBe("Correct-Horse-Battery-Staple7!");
+  expect(updateCall.payload.password).toBe("Safety!!");
   expect(new URL(page.url()).searchParams.has("auth")).toBe(false);
   expect(new URL(page.url()).hash).toBe("");
 });
 
-test("invite password setup enforces the hosted password classes before submission", async ({ page }) => {
+test("invite password setup enforces the app's eight-character, capital, and special-character policy", async ({ page }) => {
   const invitedSession = sessionFor(USER_A, "invite-session");
   await configureSupabaseRoutes(page, { session: invitedSession });
   await page.goto("/?auth=invite#access_token=invite-session&refresh_token=invite-refresh&type=invite");
 
-  await page.getByLabel("New password", { exact: true }).fill("alllowercasepassword");
-  await page.getByLabel("Confirm new password", { exact: true }).fill("alllowercasepassword");
+  const newPassword = page.getByLabel("New password", { exact: true });
+  const confirmation = page.getByLabel("Confirm new password", { exact: true });
+  await expect(newPassword).toHaveAttribute("minlength", "8");
+  await expect(confirmation).toHaveAttribute("minlength", "8");
+
+  await newPassword.fill("Short!A");
+  expect(await newPassword.evaluate((input) => input.validity.tooShort)).toBe(true);
+
+  await newPassword.fill("lowercase!");
+  await confirmation.fill("lowercase!");
   await page.getByRole("button", { name: "Set password and continue" }).click();
 
-  await expect(page.getByRole("status")).toHaveText("Use at least 12 characters with lowercase, uppercase, a number, and a symbol.");
+  await expect(page.getByRole("status")).toHaveText("Use at least 8 characters with a capital letter and a special character.");
+  expect(await page.evaluate(() =>
+    window.__safetyOpsAuthCalls.filter((call) => call.method === "updateUser").length
+  )).toBe(0);
+
+  await newPassword.fill("Safety!!");
+  await confirmation.fill("Safety!?");
+  await page.getByRole("button", { name: "Set password and continue" }).click();
+
+  await expect(page.getByRole("status")).toHaveText("The passwords do not match.");
+  expect(await page.evaluate(() =>
+    window.__safetyOpsAuthCalls.filter((call) => call.method === "updateUser").length
+  )).toBe(0);
+
+  await page.getByLabel("New password", { exact: true }).fill("CapitalA");
+  await page.getByLabel("Confirm new password", { exact: true }).fill("CapitalA");
+  await page.getByRole("button", { name: "Set password and continue" }).click();
+
+  await expect(page.getByRole("status")).toHaveText("Use at least 8 characters with a capital letter and a special character.");
   expect(await page.evaluate(() =>
     window.__safetyOpsAuthCalls.filter((call) => call.method === "updateUser").length
   )).toBe(0);
@@ -311,7 +338,8 @@ test("successful password sign in loads provisioning once despite duplicate auth
   await page.goto("/");
 
   await page.getByLabel("Email").fill(USER_A.email);
-  await page.getByLabel("Password").fill("correct-horse-battery-staple");
+  expect(await page.getByLabel("Password").getAttribute("minlength")).toBeNull();
+  await page.getByLabel("Password").fill("Safety!!");
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page.getByRole("heading", { name: "Your company access is being prepared" })).toBeVisible();
@@ -322,7 +350,7 @@ test("successful password sign in loads provisioning once despite duplicate auth
   );
   expect(signInCall.payload).toEqual({
     email: USER_A.email,
-    password: "correct-horse-battery-staple"
+    password: "Safety!!"
   });
 });
 

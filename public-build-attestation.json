@@ -4,8 +4,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 273209,
-      "sha256": "da04600a551e1595806becaa942937cf49fb63c4e0581f31afd004bb94c85787"
+      "bytes": 273534,
+      "sha256": "a963a1b7538b711bec4839e4a9f3480a504bf6a5cc007f70361814d865a2608c"
     },
     {
       "path": "data.js",
@@ -63,7 +63,7 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "aggregateSha256": "bfa3f5686aa1a6172da68c0c71a14e779bc1f57358bf79edf380f611742c1b8b",
+  "aggregateSha256": "ba6d022c248932c36fccc7977c7ca327ef9adc8d17149fc9d71d15135f5db5ad",
   "releaseFiles": [
     {
       "path": ".github/workflows/deploy-pages.yml",
@@ -77,8 +77,8 @@
     },
     {
       "path": "app.js",
-      "bytes": 273209,
-      "sha256": "da04600a551e1595806becaa942937cf49fb63c4e0581f31afd004bb94c85787"
+      "bytes": 273534,
+      "sha256": "a963a1b7538b711bec4839e4a9f3480a504bf6a5cc007f70361814d865a2608c"
     },
     {
       "path": "data.js",
@@ -157,13 +157,13 @@
     },
     {
       "path": "docs/QA_LOG.md",
-      "bytes": 7445,
-      "sha256": "d016caeea8427ae348e872fadf9febad5370e40945e270cc3f9ccbc621e8b493"
+      "bytes": 7616,
+      "sha256": "230ff9cb6187bae19fb800139679848e9d0fdcb5122fe8c353cf26c7b2a90f18"
     },
     {
       "path": "docs/RELEASE_CHECKLIST.md",
-      "bytes": 8232,
-      "sha256": "bccc120b733fe39f94a94469d3a49fc764550cffe5d9c984b0dd9503b049bd65"
+      "bytes": 8398,
+      "sha256": "5c2934880bc929e7b0599bd00214d53641e2677644e353e05b2bc805b782f580"
     },
     {
       "path": "docs/safety-programs-schema.md",
@@ -207,8 +207,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 13283,
-      "sha256": "195208b638695afdcc1e121e76450bf5a103f8661fbf3a7232e9b960805087fb"
+      "bytes": 13502,
+      "sha256": "e947e40f85e20c2640c6e228c8ba16e19150c09f6639749651deeb0cfe621bd5"
     },
     {
       "path": "safety-program-extracts.js",
@@ -287,8 +287,8 @@
     },
     {
       "path": "supabase/config.toml",
-      "bytes": 382,
-      "sha256": "28b273f7be503aa5a07572de41e7bfd39f856432c7bed28280fa4aa2bc96b390"
+      "bytes": 674,
+      "sha256": "f4bef7882d8720e0cabc2630ca4bb8695fdcef23d77b3643cd0651f329022d7c"
     },
     {
       "path": "supabase/functions/sign-form-file/index.ts",
@@ -357,8 +357,8 @@
     },
     {
       "path": "supabase/README.md",
-      "bytes": 13405,
-      "sha256": "3d330fce0e28cd79aae4467abd4bcf76ec61423ce8abeecaccfaa01a09baaa18"
+      "bytes": 13682,
+      "sha256": "af6d492223dc33cad872120d9b134f1a2f052631218c976025641bd05fed3ba7"
     },
     {
       "path": "tenant-bootstrap.js",
@@ -372,8 +372,8 @@
     },
     {
       "path": "tests/auth-onboarding.spec.js",
-      "bytes": 18404,
-      "sha256": "129d65489f339b063f291912ccdfaff8b21a53ab1740790e8cdede3f0cdd8f7b"
+      "bytes": 19638,
+      "sha256": "9772b174013f3fbd12dd4b476c9690a5c0b0106a33b4c9ab4afbd88281238b7f"
     },
     {
       "path": "tests/helpers/authenticated-workspace.js",
@@ -401,5 +401,5 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "releaseAggregateSha256": "2857c4a342d017d3adc3326df171164d366638b9904247c8aaef45c5dc421f17"
+  "releaseAggregateSha256": "311b14ccb9666aa11bdcd02427874308460963bc2f430a8b8cb905611ed42975"
 }

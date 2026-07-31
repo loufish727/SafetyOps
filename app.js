@@ -60,11 +60,12 @@
           : null
   );
   const publicSignupEnabled = window.SAFETYOPS_ALLOW_PUBLIC_SIGNUP === true;
-  const hasRequiredPasswordClasses = (password) => (
-    /[a-z]/.test(password)
+  const passwordMinimumLength = 8;
+  const passwordPolicyMessage = "Use at least 8 characters with a capital letter and a special character.";
+  const meetsPasswordPolicy = (password) => (
+    password.length >= passwordMinimumLength
     && /[A-Z]/.test(password)
-    && /[0-9]/.test(password)
-    && /[^A-Za-z0-9\s]/.test(password)
+    && /[\x21-\x2F\x3A-\x40\x5B-\x60\x7B-\x7E]/.test(password)
   );
 
   const state = {
@@ -805,10 +806,10 @@
         ${message}
         <form id="auth-password-setup-form" class="auth-form">
            <label for="auth-new-password">New password</label>
-           <input id="auth-new-password" name="password" type="password" autocomplete="new-password" minlength="12" required>
-          <p class="field-hint">Use at least 12 characters with lowercase, uppercase, a number, and a symbol.</p>
+           <input id="auth-new-password" name="password" type="password" autocomplete="new-password" minlength="${passwordMinimumLength}" required>
+          <p class="field-hint">${passwordPolicyMessage}</p>
            <label for="auth-confirm-password">Confirm new password</label>
-          <input id="auth-confirm-password" name="confirm_password" type="password" autocomplete="new-password" minlength="12" required>
+          <input id="auth-confirm-password" name="confirm_password" type="password" autocomplete="new-password" minlength="${passwordMinimumLength}" required>
           <button class="button primary auth-submit" type="submit" ${state.authBusy ? "disabled" : ""}>${state.authBusy ? "Securing account..." : "Set password and continue"}</button>
           <button class="button auth-submit" type="button" data-action="auth-sign-out">Cancel and sign out</button>
         </form>
@@ -849,7 +850,7 @@
           <label for="auth-email">Email</label>
           <input id="auth-email" name="email" type="email" autocomplete="email" required>
           <label for="auth-password">Password</label>
-          <input id="auth-password" name="password" type="password" autocomplete="${signingUp ? "new-password" : "current-password"}" minlength="12" required>
+          <input id="auth-password" name="password" type="password" autocomplete="${signingUp ? "new-password" : "current-password"}" ${signingUp ? `minlength="${passwordMinimumLength}"` : ""} required>
           <button class="button primary auth-submit" type="submit" ${state.authBusy ? "disabled" : ""}>${state.authBusy ? "Please wait…" : signingUp ? "Create secure account" : "Sign in"}</button>
         </form>
         ${!signingUp ? `<button class="button auth-submit" type="button" data-action="auth-mode" data-mode="recovery">Forgot password?</button>` : ""}
@@ -2098,9 +2099,18 @@
         throw new Error("Account creation is invite-only. Ask a SafetyOps administrator for access.");
       }
 
+      const signupPassword = String(formData.get("password") || "");
+      if (!meetsPasswordPolicy(signupPassword)) {
+        state.authStatus = "signed-out";
+        state.authMessage = passwordPolicyMessage;
+        state.authBusy = false;
+        render();
+        return;
+      }
+
       const result = await supabaseClient.auth.signUp({
         email: String(formData.get("email") || "").trim(),
-        password: String(formData.get("password") || ""),
+        password: signupPassword,
         options: {
           data: { full_name: String(formData.get("full_name") || "").trim() },
           emailRedirectTo: authRedirectUrl("invite")
@@ -2155,9 +2165,9 @@
     const formData = new FormData(form);
     const password = String(formData.get("password") || "");
     const confirmation = String(formData.get("confirm_password") || "");
-    if (password.length < 12 || !hasRequiredPasswordClasses(password) || password !== confirmation) {
-      state.authMessage = password.length < 12 || !hasRequiredPasswordClasses(password)
-        ? "Use at least 12 characters with lowercase, uppercase, a number, and a symbol."
+    if (!meetsPasswordPolicy(password) || password !== confirmation) {
+      state.authMessage = !meetsPasswordPolicy(password)
+        ? passwordPolicyMessage
         : "The passwords do not match.";
       render();
       return;

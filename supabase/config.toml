@@ -5,6 +5,11 @@ site_url = "https://loufish727.github.io/SafetyOps/"
 additional_redirect_urls = ["https://loufish727.github.io/SafetyOps/"]
 enable_signup = false
 enable_anonymous_sign_ins = false
+minimum_password_length = 8
+# Hosted Auth cannot express uppercase + special-character-only requirements
+# without adding lowercase and digit requirements. The app enforces that exact
+# creation/reset rule; hosted Auth enforces the length floor and HIBP screening.
+password_requirements = ""
 
 [auth.email]
 enable_signup = true

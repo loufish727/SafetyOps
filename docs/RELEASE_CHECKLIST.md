@@ -54,8 +54,10 @@ the exact release revision and environment.
   non-enumerating recovery, one-active-company, and last-admin controls.
 - [x] Verify anonymous signup is disabled; email confirmation is enabled; the
   Site URL and redirect allowlist are exact; hosted minimum password length is
-  12; strongest available character/leaked-password controls are on; refresh
-  rotation is enabled; and the legacy API keys are disabled.
+  8 with no extra hosted character preset; leaked-password screening and
+  refresh rotation are enabled; and the legacy API keys are disabled. The app
+  requires a capital and special character during password creation/reset;
+  hosted Auth cannot express that exact pair without adding two more classes.
 - [ ] Configure production SMTP before invitation or recovery mail to external,
   non-organization recipients. The initial owner is an organization-team
   address and can use Supabase's restricted default sender for this bootstrap.
