@@ -89,6 +89,7 @@
     formArchiveKind: localStorage.getItem(`${uiStoragePrefix}formArchiveKind`) || "all",
     formArchiveStatus: localStorage.getItem(`${uiStoragePrefix}formArchiveStatus`) || "all",
     formArchiveError: "",
+    candidateReviewSavingId: null,
     localFormUploads: [],
     programDrawerId: null,
     employeeDrawerId: null,
@@ -713,6 +714,11 @@
     return ["corporate_admin", "safety_manager"].includes(currentRawRole());
   }
 
+  function isSignedInCompanyMember() {
+    return state.authStatus === "ready"
+      && Boolean(state.authUser?.id && data.company?.id && data.currentUser?.id);
+  }
+
   function isReadOnlyAuditor() {
     return currentRawRole() === "auditor";
   }
@@ -1252,14 +1258,12 @@
           .select("id, program_version_id, form_template_version_id, file_role, is_primary, source_locator, created_at")
           .eq("company_id", membership.company_id)
           .limit(1000),
-        ["corporate_admin", "safety_manager"].includes(membership.role)
-          ? supabaseClient
-            .from("safety_program_import_candidates")
-            .select("id, company_id, display_name, folder_hint, candidate_kind, review_status, classification, language, proposed_location_codes, page_count, render_verified, mime_type, size_bytes, content_sha256, source_path_sha256, created_at")
-            .eq("company_id", membership.company_id)
-            .order("display_name", { ascending: true })
-            .limit(2000)
-          : Promise.resolve({ data: [], error: null })
+        supabaseClient
+          .from("safety_program_import_candidates")
+          .select("id, company_id, display_name, folder_hint, candidate_kind, review_status, access_scope, classification, language, proposed_location_codes, page_count, render_verified, mime_type, size_bytes, content_sha256, source_path_sha256, created_at")
+          .eq("company_id", membership.company_id)
+          .order("display_name", { ascending: true })
+          .limit(2000)
       ]);
       if (!isCurrentRequest()) return;
       const failedResult = [
@@ -2300,6 +2304,9 @@
           classification: candidate.classification || "unknown",
           archiveKind: importCandidateKind(candidate.candidate_kind),
           reviewStatus: candidate.review_status || "pending_review",
+          accessScope: candidate.access_scope === "company"
+            ? "company"
+            : "safety_admin_private",
           language: candidate.language || "Unspecified",
           proposedLocationCodes,
           proposedLocationIds: proposedLocationCodes
@@ -2340,10 +2347,6 @@
       state.authStatus = "ready";
       state.authMessage = "";
       state.authBusy = false;
-      if (!canManageCompany() && state.formLibraryMode === "archive") {
-        state.formLibraryMode = "originals";
-        localStorage.setItem(`${uiStoragePrefix}formsMode`, state.formLibraryMode);
-      }
       try {
         if (!localUploadStagingEnabled) return render();
         const localFormUploads = await listLocalFormUploads();
@@ -3518,6 +3521,19 @@
     { id: "evidence", label: "Evidence", singular: "Safety evidence", tone: "evidence" },
     { id: "unknown", label: "Unclassified", singular: "Unclassified item", tone: "unknown" }
   ];
+  const importCandidateReviewStatuses = [
+    "pending_review",
+    "needs_information",
+    "approved",
+    "rejected",
+    "duplicate"
+  ];
+  const downloadableImportCandidateStatuses = new Set([
+    "pending_review",
+    "needs_information",
+    "approved",
+    "imported"
+  ]);
 
   function importCandidateKind(candidateKind) {
     const values = [candidateKind]
@@ -3567,7 +3583,19 @@
   }
 
   function importCandidateRows() {
-    return canManageCompany() ? programLibrary.importCandidates || [] : [];
+    if (!isSignedInCompanyMember()) return [];
+    const candidates = programLibrary.importCandidates || [];
+    return canManageCompany()
+      ? candidates
+      : candidates.filter((candidate) => (
+        candidate.accessScope === "company"
+        && !forcesPrivateCandidateAccess(candidate)
+      ));
+  }
+
+  function forcesPrivateCandidateAccess(candidate) {
+    return ["confidential", "restricted"].includes(candidate?.classification)
+      || ["completed_record", "evidence", "unknown"].includes(candidate?.archiveKind);
   }
 
   function isPdfImportCandidate(item) {
@@ -3835,7 +3863,7 @@
             ? `Source manifest · ${escapeHtml(item.sourceManifestSha256.slice(0, 12))}…`
             : "Source manifest pending"}</span>
           <div class="program-card-actions">
-            <button class="button small" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Secure download</button>
+            <button class="button small" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Download original</button>
             <button class="button small primary" type="button" data-action="start-program-form" data-form-id="${escapeHtml(item.id)}" ${formAvailableForSubmission(item) ? "" : "disabled"}>Use template</button>
           </div>
         </div>
@@ -3891,12 +3919,24 @@
     const verifiedOriginal = isPdfImportCandidate(item)
       ? isVerifiedPdfImportCandidate(item)
       : Boolean(item.contentSha256 && item.sizeBytes > 0);
+    const forcedPrivate = forcesPrivateCandidateAccess(item);
+    const isCompanyAccess = item.accessScope === "company" && !forcedPrivate;
+    const accessLabel = isCompanyAccess ? "Company access" : "Safety/admin private";
+    const reviewEditable = importCandidateReviewStatuses.includes(item.reviewStatus)
+      && item.reviewStatus !== "duplicate";
+    const downloadAvailable = downloadableImportCandidateStatuses.has(item.reviewStatus);
+    const reviewSaving = state.candidateReviewSavingId === item.id;
+    const controlSuffix = String(item.id || "candidate").replaceAll(/[^a-zA-Z0-9_-]/g, "-");
+    const privacyControlId = `candidate-private-${controlSuffix}`;
+    const reviewControlId = `candidate-review-${controlSuffix}`;
+    const reviewHelpId = `candidate-review-help-${controlSuffix}`;
     return `
-      <article class="program-card private form-file-card import-candidate-card kind-${escapeHtml(kind.tone)} sensitivity-${escapeHtml(sensitivity)}" data-candidate-kind="${escapeHtml(kind.id)}">
+      <article class="program-card ${isCompanyAccess ? "company-access" : "private"} form-file-card import-candidate-card kind-${escapeHtml(kind.tone)} sensitivity-${escapeHtml(sensitivity)}" data-candidate-kind="${escapeHtml(kind.id)}" data-access-scope="${escapeHtml(item.accessScope)}">
         <div class="program-card-top">
           <span class="import-kind-badge kind-${escapeHtml(kind.tone)}">${escapeHtml(kind.singular)}</span>
           <span class="import-review-badge">${escapeHtml(readableStatus(item.reviewStatus))}</span>
           <span class="import-sensitivity-badge ${escapeHtml(sensitivity)}">${escapeHtml(readableStatus(sensitivity))}</span>
+          <span class="import-access-badge ${isCompanyAccess ? "company" : "private"}" aria-label="Access: ${escapeHtml(accessLabel)}">${escapeHtml(accessLabel)}</span>
         </div>
         <h3>${escapeHtml(item.displayName)}</h3>
         <p class="import-original-status ${verifiedOriginal ? "verified" : "pending"}">${escapeHtml(importCandidateOriginalLabel(item))}</p>
@@ -3911,12 +3951,35 @@
           <div><dt>Language</dt><dd>${escapeHtml(item.language)}</dd></div>
           <div><dt>Proposed locations (unapproved)</dt><dd>${escapeHtml(proposedLocations)}</dd></div>
         </dl>
+        ${canManageCompany() ? `
+          <form class="candidate-review-form" data-candidate-review-form="${escapeHtml(item.id)}" aria-label="Access and review controls for ${escapeHtml(item.displayName)}">
+            <input type="hidden" name="candidate_id" value="${escapeHtml(item.id)}">
+            <div class="candidate-privacy-control">
+              <input id="${escapeHtml(privacyControlId)}" name="safety_admin_private" type="checkbox" value="true" ${isCompanyAccess ? "" : "checked"} ${reviewEditable && !reviewSaving && !forcedPrivate ? "" : "disabled"} aria-describedby="${escapeHtml(reviewHelpId)}">
+              <label for="${escapeHtml(privacyControlId)}">Safety/admin private</label>
+            </div>
+            <p id="${escapeHtml(reviewHelpId)}" class="candidate-access-help">${forcedPrivate
+              ? "Sensitive or record material must remain Safety/admin private."
+              : "Clear this checkbox to make the original available to authenticated company members. Original files are never public."}</p>
+            <div class="candidate-review-field">
+              <label for="${escapeHtml(reviewControlId)}">Review status</label>
+              <select id="${escapeHtml(reviewControlId)}" name="review_status" ${reviewEditable && !reviewSaving ? "" : "disabled"} required>
+                ${!reviewEditable ? `<option value="${escapeHtml(item.reviewStatus)}" selected>${escapeHtml(readableStatus(item.reviewStatus))} (terminal)</option>` : ""}
+                ${importCandidateReviewStatuses.map((status) => `<option value="${status}" ${item.reviewStatus === status ? "selected" : ""}>${escapeHtml(readableStatus(status))}</option>`).join("")}
+              </select>
+            </div>
+            <button class="button small candidate-review-save" type="submit" ${reviewEditable && !reviewSaving ? "" : "disabled"}>${reviewSaving ? "Saving..." : "Save review"}</button>
+          </form>
+        ` : `
+          <p class="candidate-member-access-note"><strong>Company access.</strong> Available to authenticated company members; original files are never public.</p>
+        `}
         <div class="program-card-footer">
           <span class="program-version">Review · ${escapeHtml(readableStatus(item.reviewStatus))}</span>
           <div class="program-card-actions">
-            <button class="button small primary" type="button" data-action="download-import-candidate" data-candidate-id="${escapeHtml(item.id)}">Secure original download</button>
+            <button class="button small primary" type="button" data-action="download-import-candidate" data-candidate-id="${escapeHtml(item.id)}" ${downloadAvailable ? "" : "disabled"}>Download original</button>
           </div>
         </div>
+        ${downloadAvailable ? "" : `<p class="candidate-download-unavailable" role="status">Original unavailable while review status is ${escapeHtml(readableStatus(item.reviewStatus))}.</p>`}
       </article>
     `;
   }
@@ -3962,7 +4025,7 @@
           <div class="program-card-actions">
             <button class="button small" type="button" data-action="open-program" data-program-id="${escapeHtml(item.id)}">Details</button>
             ${isForm
-              ? `${item.originalFile ? `<button class="button small" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Secure original</button>` : ""}
+              ? `${item.originalFile ? `<button class="button small" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Download original</button>` : ""}
                  <button class="button small primary" type="button" data-action="start-program-form" data-form-id="${escapeHtml(item.id)}" ${formAvailableForSubmission(item) ? "" : "disabled"}>Start form</button>`
               : item.sourceUrl ? `<a class="button small" href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open source</a>` : ""}
           </div>
@@ -3976,8 +4039,8 @@
     const archiveRows = importCandidateRows();
     const modes = [
       { id: "originals", label: "Original forms", count: originalFormTemplates().length },
-      ...(canManageCompany()
-        ? [{ id: "archive", label: "Drive archive review", count: archiveRows.length }]
+      ...(isSignedInCompanyMember()
+        ? [{ id: "archive", label: canManageCompany() ? "Drive archive review" : "Company originals", count: archiveRows.length }]
         : []),
       ...(localUploadStagingEnabled
         ? [{ id: "uploads", label: "Local staging", count: state.localFormUploads.length }]
@@ -3993,14 +4056,15 @@
       <section class="import-archive-review" aria-labelledby="drive-archive-review-title">
         <div class="import-archive-summary">
           <div>
-            <p class="section-kicker">Manager-only private source inventory</p>
-            <h3 id="drive-archive-review-title">Drive archive review</h3>
+            <p class="section-kicker">${canManageCompany() ? "Safety source access and review" : "Signed-in company source library"}</p>
+            <h3 id="drive-archive-review-title">${canManageCompany() ? "Drive archive review" : "Company originals"}</h3>
             <p>${archiveRows.length} source item${archiveRows.length === 1 ? "" : "s"} · ${archiveVerifiedPdfRows.length} verified original PDF${archiveVerifiedPdfRows.length === 1 ? "" : "s"} · ${archivePageCount} verified PDF page${archivePageCount === 1 ? "" : "s"}</p>
+            <p>Originals follow their Company access or Safety/admin private setting. Company access is limited to authenticated company members; original files are never public.</p>
           </div>
-          <span class="private-source-badge">Corporate admin / safety manager</span>
+          <span class="private-source-badge">${canManageCompany() ? "Review controls available" : "Company access"}</span>
         </div>
         ${state.formArchiveError ? `<div class="import-archive-error" role="status">${escapeHtml(state.formArchiveError)}</div>` : ""}
-        <div class="import-kind-filters" role="group" aria-label="Filter Drive archive by classification">
+        <div class="import-kind-filters" role="group" aria-label="Filter Drive archive by source type">
           ${[
             { id: "all", label: "All items" },
             ...importCandidateKinds
@@ -4016,7 +4080,7 @@
           }).join("")}
         </div>
         <div class="import-archive-filter-row">
-          <label for="form-archive-status">Review status</label>
+          <label for="form-archive-status">Filter by review status</label>
           <select id="form-archive-status" class="filter-select">
             <option value="all" ${state.formArchiveStatus === "all" ? "selected" : ""}>All review statuses</option>
             ${reviewStatuses.map((status) => `<option value="${escapeHtml(status)}" ${state.formArchiveStatus === status ? "selected" : ""}>${escapeHtml(readableStatus(status))}</option>`).join("")}
@@ -4050,7 +4114,7 @@
         <span>${state.formLibraryMode === "uploads"
           ? "Uploads stay in this browser only. Production uses a private Supabase bucket, tenant RLS, malware scanning, and short-lived signed URLs."
           : state.formLibraryMode === "archive"
-            ? "This review queue exposes approved metadata only. Every original remains private and requires a fresh, short-lived authorization before download."
+            ? "Originals are available according to Company access or Safety/admin private. Company access is for authenticated company members; originals are never public."
             : "Original files remain immutable; templates and completed submissions keep their source version and SHA-256 trace."}</span>
       </div>
       ${archiveControls}
@@ -4074,7 +4138,7 @@
     const hasTenantLibrary = programLibraryItems().length > 0 || archiveRows.length > 0;
     const formModeLabel = {
       originals: "Original forms",
-      archive: "Drive archive review",
+      archive: canManageCompany() ? "Drive archive review" : "Company originals",
       uploads: "Local staging",
       templates: "Interactive templates"
     }[state.formLibraryMode] || "Forms";
@@ -4086,7 +4150,7 @@
         <article class="summary-card"><span>Original form PDFs</span><strong>${originalFormTemplates().length}</strong></article>
         <article class="summary-card"><span>Interactive templates</span><strong>${allFormTemplates().length}</strong></article>
         <article class="summary-card"><span>Submitted forms</span><strong>${submissions.filter((item) => item.status === "Submitted").length}</strong></article>
-        ${canManageCompany() ? `<article class="summary-card"><span>Drive archive items</span><strong>${archiveRows.length}</strong></article>` : ""}
+        ${isSignedInCompanyMember() ? `<article class="summary-card"><span>${canManageCompany() ? "Drive archive items" : "Company originals"}</span><strong>${archiveRows.length}</strong></article>` : ""}
       </section>
       <div style="height:14px"></div>
       ${hasTenantLibrary ? `<section class="import-status running" aria-label="Safety program ingestion status">
@@ -4133,7 +4197,9 @@
             <div>
               <h2>${escapeHtml(state.programCategory === "forms" ? formModeLabel : categories.find((item) => item.id === state.programCategory)?.label || "Programs")}</h2>
               <p>${state.programCategory === "forms" && state.formLibraryMode === "archive"
-                ? `${rows.length} item${rows.length === 1 ? "" : "s"} in the company review queue · location tags are unapproved proposals`
+                ? canManageCompany()
+                  ? `${rows.length} item${rows.length === 1 ? "" : "s"} in the company review queue · location tags are unapproved proposals`
+                  : `${rows.length} original${rows.length === 1 ? "" : "s"} available to authenticated company members · originals are never public`
                 : `${rows.length} item${rows.length === 1 ? "" : "s"} available for ${state.locationId === "all" ? escapeHtml(allLocationsLabel(true)) : escapeHtml(locationName(state.locationId))}`}</p>
             </div>
             <span class="private-source-badge">Access-controlled</span>
@@ -4302,7 +4368,7 @@
           </div>
           <footer class="program-drawer-footer">
             ${item.originalFile?.id ? `
-              <button class="button" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Secure original download</button>
+              <button class="button" type="button" data-action="download-form-original" data-form-id="${escapeHtml(item.id)}">Download original</button>
             ` : item.originalFile?.path ? `
               <button class="button" type="button" data-action="view-form-original" data-form-id="${escapeHtml(item.id)}">View original PDF</button>
               <a class="button" href="${escapeHtml(item.originalFile.path)}" download="${escapeHtml(item.originalFile.filename)}">Download original</a>
@@ -6828,16 +6894,73 @@
       document.body.append(link);
       link.click();
       link.remove();
-      showToast("Secure download issued", `${metadata.filename} is available through a short-lived authorized URL.`);
+      showToast("Original download started", `${metadata.filename} is downloading.`);
     } catch (error) {
-      showToast("Secure download unavailable", error?.message || "The original could not be authorized.");
+      showToast("Original unavailable", error?.message || "The original could not be downloaded.");
+    }
+  }
+
+  async function handleImportCandidateReview(form) {
+    if (!canManageCompany() || !supabaseClient) {
+      showToast("Review not saved", "Corporate administrator or safety manager access is required.");
+      return;
+    }
+    const formData = new FormData(form);
+    const candidateId = String(formData.get("candidate_id") || "");
+    const candidate = (programLibrary.importCandidates || []).find((item) => item.id === candidateId);
+    const reviewStatus = String(formData.get("review_status") || "");
+    if (!candidate || !importCandidateReviewStatuses.includes(reviewStatus)) {
+      showToast("Review not saved", "Choose a valid archive candidate and review status.");
+      return;
+    }
+    if (["duplicate", "imported", "superseded"].includes(candidate.reviewStatus)) {
+      showToast("Review not saved", "This candidate is in a terminal review state.");
+      return;
+    }
+    const accessScope = forcesPrivateCandidateAccess(candidate)
+      ? "safety_admin_private"
+      : formData.get("safety_admin_private") === "true"
+        ? "safety_admin_private"
+        : "company";
+
+    state.candidateReviewSavingId = candidate.id;
+    render();
+    try {
+      const result = await supabaseClient.rpc("update_safety_program_import_candidate_review", {
+        target_candidate_id: candidate.id,
+        target_access_scope: accessScope,
+        target_review_status: reviewStatus
+      });
+      if (result.error) throw result.error;
+      const saved = Array.isArray(result.data) ? result.data[0] : result.data;
+      candidate.reviewStatus = importCandidateReviewStatuses.includes(saved?.review_status)
+        ? saved.review_status
+        : reviewStatus;
+      candidate.accessScope = saved?.access_scope === "company"
+        && !forcesPrivateCandidateAccess(candidate)
+        ? "company"
+        : accessScope;
+      state.candidateReviewSavingId = null;
+      render();
+      showToast(
+        "Review saved",
+        `${candidate.displayName} is ${candidate.accessScope === "company" ? "available to authenticated company members" : "Safety/admin private"}.`
+      );
+    } catch (error) {
+      state.candidateReviewSavingId = null;
+      render();
+      showToast("Review not saved", error?.message || "The candidate review could not be updated.");
     }
   }
 
   async function requestImportCandidateDownload(candidateId) {
     const candidate = importCandidateRows().find((item) => item.id === candidateId);
-    if (!canManageCompany() || !candidate) {
-      showToast("Original unavailable", "This private source item is available only to authorized safety managers.");
+    if (!isSignedInCompanyMember() || !candidate) {
+      showToast("Original unavailable", "This original is not available with your signed-in company access.");
+      return;
+    }
+    if (!downloadableImportCandidateStatuses.has(candidate.reviewStatus)) {
+      showToast("Original unavailable", `Downloads are unavailable while review status is ${readableStatus(candidate.reviewStatus)}.`);
       return;
     }
     if (
@@ -6893,9 +7016,9 @@
       document.body.append(link);
       link.click();
       link.remove();
-      showToast("Secure original issued", `${candidate.displayName} is available through a short-lived authorized URL.`);
+      showToast("Original download started", `${candidate.displayName} is downloading according to its company access setting.`);
     } catch (error) {
-      showToast("Secure download unavailable", error?.message || "The original could not be authorized.");
+      showToast("Original unavailable", error?.message || "The original could not be downloaded.");
     }
   }
 
@@ -7195,7 +7318,7 @@
       const allowedModes = new Set([
         "originals",
         "templates",
-        ...(canManageCompany() ? ["archive"] : []),
+        ...(isSignedInCompanyMember() ? ["archive"] : []),
         ...(localUploadStagingEnabled ? ["uploads"] : [])
       ]);
       state.formLibraryMode = allowedModes.has(target.dataset.mode) ? target.dataset.mode : "originals";
@@ -7555,6 +7678,12 @@
     if (event.target.id === "location-create-form") {
       event.preventDefault();
       handleLocationCreate(event.target);
+      return;
+    }
+
+    if (event.target.matches("[data-candidate-review-form]")) {
+      event.preventDefault();
+      handleImportCandidateReview(event.target);
       return;
     }
 

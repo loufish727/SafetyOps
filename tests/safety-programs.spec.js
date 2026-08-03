@@ -1,6 +1,14 @@
 const { test, expect } = require("@playwright/test");
 const { configureAuthenticatedWorkspace } = require("./helpers/authenticated-workspace");
 
+const ordinaryCompanyMemberTests = new Set([
+  "Drive company access is visible to ordinary authorized company members"
+]);
+
+const safetyManagerTests = new Set([
+  "Drive archive review controls update scope and status for safety managers"
+]);
+
 test.beforeEach(async ({ page }, testInfo) => {
   await configureAuthenticatedWorkspace(page, {
     importCandidates: true,
@@ -10,9 +18,9 @@ test.beforeEach(async ({ page }, testInfo) => {
       testInfo.title === "Drive archive rejects mismatched download metadata",
     archiveQueryError:
       testInfo.title === "Drive archive query failure does not break the workspace",
-    role: testInfo.title === "Drive archive review is hidden from non-manager roles"
+    role: ordinaryCompanyMemberTests.has(testInfo.title)
       ? "worker"
-      : testInfo.title === "Drive archive review is available to safety managers"
+      : safetyManagerTests.has(testInfo.title)
         ? "safety_manager"
         : undefined,
     programFixture:
@@ -223,11 +231,11 @@ test("Drive archive review shows full original trace and classification filters"
   await expect(completedRecord).toBeVisible();
 
   await page.getByRole("button", { name: /^All items 7$/ }).click();
-  await page.getByLabel("Review status").selectOption("reviewed");
+  await page.locator("#form-archive-status").selectOption("reviewed");
   await expect(page.locator(".import-candidate-card")).toHaveCount(1);
   await expect(completedRecord).toBeVisible();
 
-  await page.getByLabel("Review status").selectOption("all");
+  await page.locator("#form-archive-status").selectOption("all");
   await page.getByLabel("Search Drive archive").fill("Oregon OSHA");
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.locator(".import-candidate-card")).toHaveCount(1);
@@ -249,9 +257,9 @@ test("Drive archive secure download authorizes by candidate id", async ({ page }
     hasText: "Hazard Assessment Checklist.pdf"
   });
   const downloadPromise = page.waitForEvent("download");
-  await card.getByRole("button", { name: "Secure original download" }).click();
+  await card.getByRole("button", { name: "Download original" }).click();
   await downloadPromise;
-  await expect(page.getByText("Secure original issued", { exact: true })).toBeVisible();
+  await expect(page.getByText("Original download started", { exact: true })).toBeVisible();
 
   const functionCall = await page.evaluate(() => window.__safetyOpsFakeDb.calls.find((call) => (
     call.method === "function" && call.name === "sign-form-file"
@@ -280,8 +288,8 @@ test("Drive archive rejects mismatched download metadata", async ({ page }, test
   const card = page.locator(".import-candidate-card").filter({
     hasText: "Hazard Assessment Checklist.pdf"
   });
-  await card.getByRole("button", { name: "Secure original download" }).click();
-  await expect(page.getByText("Secure download unavailable", { exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "Download original" }).click();
+  await expect(page.getByText("Original unavailable", { exact: true })).toBeVisible();
   await expect(page.getByText(/does not match the reviewed archive record/i)).toBeVisible();
 });
 
@@ -295,18 +303,54 @@ test("Drive archive query failure does not break the workspace", async ({ page }
   await expect(page.getByText("Workspace load failed", { exact: true })).toHaveCount(0);
 });
 
-test("Drive archive review is hidden from non-manager roles", async ({ page }, testInfo) => {
+test("Drive company access is visible to ordinary authorized company members", async ({ page }, testInfo) => {
+  await page.route("https://safetyops-test.supabase.co/storage/v1/object/sign/**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/pdf",
+    headers: { "Content-Disposition": 'attachment; filename="Hazard Assessment Checklist.pdf"' },
+    body: "%PDF-1.7\n%%EOF\n"
+  }));
   await openProgramLibrary(page, testInfo.project.name);
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
 
-  await expect(page.getByRole("tab", { name: /Drive archive review/ })).toHaveCount(0);
-  const queriedPrivateArchive = await page.evaluate(() => window.__safetyOpsFakeDb.calls.some((call) => (
-    call.method === "from" && call.table === "safety_program_import_candidates"
-  )));
-  expect(queriedPrivateArchive).toBe(false);
+  const archiveTab = page.getByRole("tab", { name: /Company originals/ });
+  await expect(archiveTab).toBeVisible();
+  await archiveTab.click();
+
+  await expect(page.getByText(
+    /available to authenticated company members; original files are never public/i
+  ).first()).toBeVisible();
+  await expect(page.locator(".import-candidate-card")).toHaveCount(3);
+
+  const companyCard = page.locator(".import-candidate-card").filter({
+    hasText: "Hazard Assessment Checklist.pdf"
+  });
+  await expect(companyCard).toBeVisible();
+  await expect(companyCard.getByText("Company access", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Signed JHA - July.pdf" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Hearing Conservation Program.docx" })).toHaveCount(0);
+
+  const downloadPromise = page.waitForEvent("download");
+  await companyCard.getByRole("button", { name: "Download original" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("Hazard Assessment Checklist.pdf");
+
+  const privateAttempt = await page.evaluate(async () => {
+    const result = await window.supabase.createClient().functions.invoke("sign-form-file", {
+      body: { candidate_id: "70000000-0000-4000-8000-000000000003" }
+    });
+    return {
+      data: result.data,
+      error: result.error?.message || null
+    };
+  });
+  expect(privateAttempt).toEqual({
+    data: null,
+    error: "Candidate file access denied."
+  });
 });
 
-test("Drive archive review is available to safety managers", async ({ page }, testInfo) => {
+test("Drive archive review controls update scope and status for safety managers", async ({ page }, testInfo) => {
   await openProgramLibrary(page, testInfo.project.name);
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
 
@@ -314,6 +358,70 @@ test("Drive archive review is available to safety managers", async ({ page }, te
   await expect(archiveTab).toBeVisible();
   await archiveTab.click();
   await expect(page.locator(".import-candidate-card")).toHaveCount(7);
+
+  const card = page.locator(".import-candidate-card").filter({
+    hasText: "Hazard Assessment Checklist.pdf"
+  });
+  const privateToggle = card.getByLabel("Safety/admin private");
+  await expect(privateToggle).not.toBeChecked();
+  await privateToggle.check();
+  await card.getByLabel("Review status").selectOption("approved");
+  await card.getByRole("button", { name: "Save review" }).click();
+
+  await expect.poll(() => page.evaluate(() => {
+    const call = window.__safetyOpsFakeDb.calls.find((item) => (
+      item.method === "rpc"
+      && item.name === "update_safety_program_import_candidate_review"
+    ));
+    return call?.payload || null;
+  })).toEqual({
+    target_candidate_id: "70000000-0000-4000-8000-000000000001",
+    target_access_scope: "safety_admin_private",
+    target_review_status: "approved"
+  });
+
+  const updated = await page.evaluate(() => window.__safetyOpsFakeDb.tables
+    .safety_program_import_candidates
+    .find((item) => item.id === "70000000-0000-4000-8000-000000000001"));
+  expect(updated).toMatchObject({
+    access_scope: "safety_admin_private",
+    review_status: "approved"
+  });
+});
+
+test("Drive restricted candidates cannot be made company visible", async ({ page }, testInfo) => {
+  await openProgramLibrary(page, testInfo.project.name);
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+  await page.getByRole("tab", { name: /Drive archive review/ }).click();
+
+  const restrictedCard = page.locator(".import-candidate-card").filter({
+    hasText: "Signed JHA - July.pdf"
+  });
+  const privateToggle = restrictedCard.getByRole("checkbox", { name: "Safety/admin private" });
+  await expect(privateToggle).toBeChecked();
+  await expect(privateToggle).toBeDisabled();
+
+  const result = await page.evaluate(async () => {
+    const response = await window.supabase.createClient().rpc(
+      "update_safety_program_import_candidate_review",
+      {
+        target_candidate_id: "70000000-0000-4000-8000-000000000002",
+        target_access_scope: "company",
+        target_review_status: "approved"
+      }
+    );
+    const stored = window.__safetyOpsFakeDb.tables.safety_program_import_candidates.find((item) => (
+      item.id === "70000000-0000-4000-8000-000000000002"
+    ));
+    return {
+      error: response.error?.message || null,
+      accessScope: stored?.access_scope || null
+    };
+  });
+  expect(result).toMatchObject({
+    accessScope: "safety_admin_private"
+  });
+  expect(result.error).toMatch(/must remain safety\/admin private/i);
 });
 
 test("program library has no horizontal page overflow on mobile", async ({ page }, testInfo) => {

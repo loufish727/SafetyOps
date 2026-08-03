@@ -2,7 +2,7 @@
 
 SafetyOps uses Supabase Auth, PostgreSQL, Row Level Security, private Storage, security-definer RPCs, and Edge Functions as the authority for LFES company data. GitHub Pages is only the public browser client.
 
-The last recorded hosted SafetyOps migration evidence in this document is aligned through `012`; migrations `013` through `016` exist in source and require their own deployment evidence. Migrations `010` through `012` compiled and applied in the final pgcrypto compatibility sequence. Supabase's ledger is version-based and does not prove checksum identity for previously applied legacy files. RLS, role, Storage, Edge, and workflow behavior remain **PARTIAL/UNPROVEN** until the staging proof in this document is complete.
+The hosted SafetyOps project records migrations through `017`. Migrations `016` and `017` were applied from reviewed source and their ledger entries are bound to exact source SHA-256 values. Migration `017` live checks confirm 112 company-access candidates, 11 safety/admin-private candidates, zero invalid company scopes, RLS on candidates and review events, no anonymous table/function grants, no direct authenticated candidate update grant, and only scoped authenticated review/download metadata RPC access. Migrations `013` through `015` remain recorded under their original deployment versions, so the ledger does not prove checksum identity for those previously applied files. RLS, role, Storage, Edge, and workflow behavior remain **PARTIAL/UNPROVEN** until the remaining staging proof in this document is complete.
 
 ## Migration order
 
@@ -25,13 +25,15 @@ Apply every migration in filename order. Later migrations depend on objects and 
 15. `202607310015_drive_ingest_invalidation_ledger.sql` — Adds append-only ingest-run invalidation while retaining the frozen original evidence.
 16. `202608030016_employee_safety_workflows.sql` — Adds employees independent from Auth, exact-location assignments, safety-committee minutes, action/training ownership, employee PDF evidence, and isolated 15-minute one-time tablet forms with append-only completion hashes.
 
+17. `202608030017_candidate_access_review.sql` — Adds per-candidate company or safety/admin-private access, fail-closed sensitive-record rules, company-member versus manager RLS, a manager review RPC, and append-only hash-chained review events.
+
 Migration `002` requires PostgreSQL 15 or newer because it uses `UNIQUE NULLS NOT DISTINCT`.
 
 ## Deployment order
 
 1. Create a dedicated SafetyOps Supabase project.
 2. Link the local project or supply the target project reference to the CLI.
-3. Apply migrations `001` through `016` in order and verify that each transaction completed.
+3. Apply migrations `001` through `017` in order and verify that each transaction completed.
 4. Deploy the controlled-download Edge Function:
 
    ```bash

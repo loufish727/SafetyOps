@@ -35,11 +35,12 @@ security-definer RPC, Edge Function, or cross-company behavior.
 
 SafetyOps is a configured public application shell with static regulatory
 reference artifacts and a Supabase-backed implementation. The repository
-contains sixteen ordered migrations and three Edge Functions. Migration `016`
-passed a hosted rollback compile, was applied, and has a ledger entry bound to
-the reviewed source SHA-256; exact legacy applied-file checksums are not
-asserted. The employee-document function is active with JWT verification. The
-latest full local Playwright run passed 91 tests, skipped 7
+contains seventeen ordered migrations and three Edge Functions. Migrations
+`016` and `017` passed hosted rollback compilation, were applied, and have
+ledger entries bound to their reviewed source SHA-256 values; exact legacy
+applied-file checksums are not asserted. The employee-document function is
+active with JWT verification. The latest full local Playwright run passed 93
+tests, skipped 7
 conditional/project instances, and failed 0. The public-release process uses
 an Ed25519-signed v2 manifest over the
 exact 12-file deployment artifact and exact sanitized release tree, verified

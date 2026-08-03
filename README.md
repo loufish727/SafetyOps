@@ -4,7 +4,7 @@ SafetyOps is a multi-tenant application foundation for workplace safety operatio
 
 The public application starts empty. It does not ship a fictional company, locations, workers, incidents, inspections, training records, documents, or tenant control mappings. GitHub Pages hosts the application shell and public regulatory reference metadata; authorized company records and private files belong in Supabase.
 
-The browser implementation, sixteen ordered migrations, and three Edge Functions exist in source. On 2026-08-03, migration `016` passed rollback compilation, was applied to the dedicated hosted SafetyOps project, and was recorded in its migration ledger with the reviewed source SHA-256. The live catalog exposes the employee workflow tables/RPCs with RLS, zero anonymous table grants, and only the two capability-bound handoff RPCs executable by `anon`. The employee-document function is active with JWT verification. Earlier migrations `013` through `015` remain recorded under their original deployment timestamps, so the ledger still does not prove checksum identity for previously applied files. The full authenticated role matrix, configured malware scanner, Storage recovery, regulatory review, and production operations still require separate proof before broad production use.
+The browser implementation, seventeen ordered migrations, and three Edge Functions exist in source. On 2026-08-03, migrations `016` and `017` passed hosted rollback compilation, were applied to the dedicated hosted SafetyOps project, and were recorded in its migration ledger with their reviewed source SHA-256 values. Migration `017` gives 112 reusable internal Drive candidates company access and keeps 11 sensitive or uncertain candidates safety/admin private, with RLS, a manager-only review RPC, and append-only review events. The live catalog exposes the employee workflow tables/RPCs with RLS, zero anonymous table grants, and only the two capability-bound handoff RPCs executable by `anon`. The employee-document function is active with JWT verification. Earlier migrations `013` through `015` remain recorded under their original deployment timestamps, so the ledger still does not prove checksum identity for previously applied files. The full authenticated role matrix, configured malware scanner, Storage recovery, regulatory review, and production operations still require separate proof before broad production use.
 
 ## Current source implementation
 
@@ -19,6 +19,7 @@ The browser implementation, sixteen ordered migrations, and three Edge Functions
 - Facilitated employee forms: the safety user assigns a published form, starts a 15-minute one-time tablet handoff, and sees pending/completed status without requiring the employee to have an account
 - Append-only employee form submissions with pinned employee/location/facilitator/schema evidence and an immutable SHA-256 manifest; consumed handoffs cannot be replayed
 - Controlled form-original downloads through short-lived, one-object signed URLs
+- Per-item Drive-original access review: reusable internal material defaults to authenticated company access, while safety/admin private material remains manager-only and nothing is anonymously public
 - Full structural eCFR index for 29 CFR Chapter XVII, current through 2026-07-29
 - Curated high-use Oregon OSHA, Washington DOSH, and Cal/OSHA starter references
 - Location regulatory profiles, jurisdiction assignments, applicability assessments, approved control mappings, and evidence lineage
@@ -27,7 +28,7 @@ The browser implementation, sixteen ordered migrations, and three Edge Functions
 - Service-only invite-owner bootstrap, retirement of both browser self-onboarding RPCs, single-active-company membership, attributable membership audit, last-administrator protection, state-aware location creation, database-derived jurisdiction review, and resolved-jurisdiction program gating in migration `011`
 - Row Level Security, immutable version records, append-only audit records, and private Storage design
 - Bounded browser queries, with explicit server pagination still required before large-scale use
-- Responsive desktop/mobile interface; the latest full local Playwright run completed with 91 passed, 7 conditional/project skips, and 0 failures
+- Responsive desktop/mobile interface; the latest full local Playwright run completed with 93 passed, 7 conditional/project skips, and 0 failures
 - GitHub Pages build and deployment workflow
 
 Some administrative workflows remain intentionally unavailable until their server-side services are deployed. In particular, SafetyOps does **not** yet provide a production form-original upload service. The checked-in `sign-form-file` Edge Function authorizes downloads of already committed, verified form originals; it is not an upload, quarantine, malware-scan, or commit service. The separate employee-PDF service provides short-lived upload sessions, exact-size/SHA-256 verification, recoverable processing leases, quarantine, and a service-only scan attestation bound to the stored hash. It releases a PDF only when a configured trusted scanner reports those exact bytes `clean`; with no scanner configured, the document remains non-releasable with malware status `unavailable`. Development-only local upload staging is disabled by default and is never the production system of record.
@@ -109,7 +110,7 @@ npm run sync:osha
 
 Use a separate Supabase project for SafetyOps:
 
-1. Apply every SQL file in `supabase/migrations/` in filename order, currently `202607300001` through `202608030016`. The last recorded hosted evidence in this document proves migration-ledger parity only through `012`; migrations `013` through `016` need their own application record. This is not a checksum assertion for earlier applied files; database behavior still requires the hosted catalog, role, and workflow tests listed in the release checklist.
+1. Apply every SQL file in `supabase/migrations/` in filename order, currently `202607300001` through `202608030017`. Migrations `016` and `017` have hosted application records bound to their reviewed source SHA-256 values. Migrations `013` through `015` remain recorded under their original deployment versions, which is not a checksum assertion for those earlier files; database behavior still requires the hosted catalog, role, and workflow tests listed in the release checklist.
 2. Deploy the controlled-download function:
 
    ```bash
