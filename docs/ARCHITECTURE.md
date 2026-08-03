@@ -22,14 +22,15 @@ flowchart LR
 ```
 
 This is the target architecture represented by source. The public shell has an
-exact signed release process. Migrations `016` and `017` passed hosted rollback
-compilation, were applied on 2026-08-03, and have ledger entries bound to their
-reviewed source SHA-256 values. Migration `017` live checks prove the candidate
-scope counts, fail-closed invariant, RLS, table grants, and RPC grants. Named
-employee-workflow catalog checks also passed, and the employee-document Edge
-Function is active with JWT verification. That evidence does not prove legacy
-migration checksums, the full cross-role and tenant-isolation matrix,
-configured scanner behavior, or complete workflows.
+exact signed release process. Migrations `016` through `018` passed hosted
+rollback compilation, were applied on 2026-08-03, and have ledger entries bound
+to their reviewed source SHA-256 values. Migration `017` live checks prove the
+candidate-scope boundary; migration `018` proves immutable collection labels
+for all 123 Drive originals, their exact 120/3 collection split, RLS, grants,
+and enabled guards. Named employee-workflow catalog checks also passed, and the
+employee-document and hardened Drive-ingest Edge Functions are active. That
+evidence does not prove legacy migration checksums, the full cross-role and
+tenant-isolation matrix, configured scanner behavior, or complete workflows.
 
 ## Public layer
 
@@ -159,12 +160,16 @@ Migrations must be applied in filename order:
     safety/admin-private Drive candidates, fail-closed sensitive-record rules,
     manager review transitions, scoped downloads, and append-only review audit
     events.
+18. `202608030018_source_collection_hierarchy.sql`: immutable top-level Drive
+    collection labels derived from frozen manifests, exact folder-tree
+    projection without raw paths, and server-owned derivation for future
+    candidate inserts.
 
 The critical intended boundaries are `private.is_company_member`,
 `private.can_manage_company`, `private.can_access_location`, RLS policies,
 foreign keys that repeat `company_id`, and pinned `search_path` values on
 security-definer functions. Hosted application and ledger evidence for
-migrations `016` and `017`, plus the final `010`–`012` compatibility sequence,
+migrations `016` through `018`, plus the final `010`–`012` compatibility sequence,
 are proven;
 exact legacy file identity and the complete runtime role and tenant-denial
 matrix are not.

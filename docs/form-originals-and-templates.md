@@ -41,6 +41,21 @@ private by both a normalization trigger and a table constraint. Users cannot
 update candidate rows directly; managers use the reviewed RPC, and each actual
 change creates an append-only, hash-chained review event.
 
+## Source collection and folder hierarchy
+
+Each Drive candidate carries an immutable `source_collection` derived
+server-side from its frozen ingest manifest. The label is a single sanitized
+folder name; the browser never receives the raw ZIP source path. The exact
+`folder_hint`, source-path fingerprint, and candidate ID remain unchanged for
+traceability.
+
+The archive library renders the source collection as the top-level headline
+and each slash-separated folder segment as a nested, collapsible category.
+Counts are computed only from the candidates already authorized for the
+current user, so private-only folders and counts do not leak to ordinary
+company members. Files retain their exact source node and sort deterministically
+by name, source-path fingerprint, and candidate ID.
+
 ## Private manual-upload workflow
 
 The browser never receives a service-role key and never writes directly to the

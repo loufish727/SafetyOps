@@ -18,6 +18,8 @@ test.beforeEach(async ({ page }, testInfo) => {
       testInfo.title === "Drive archive rejects mismatched download metadata",
     archiveQueryError:
       testInfo.title === "Drive archive query failure does not break the workspace",
+    archiveFolderHierarchy:
+      testInfo.title === "Drive archive folders organize originals into browsable categories",
     role: ordinaryCompanyMemberTests.has(testInfo.title)
       ? "worker"
       : safetyManagerTests.has(testInfo.title)
@@ -240,6 +242,131 @@ test("Drive archive review shows full original trace and classification filters"
   await page.getByRole("button", { name: "Search", exact: true }).click();
   await expect(page.locator(".import-candidate-card")).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Oregon OSHA Quick Reference.pdf" })).toBeVisible();
+});
+
+test("Drive archive folders organize originals into browsable categories", async ({ page }, testInfo) => {
+  await openProgramLibrary(page, testInfo.project.name);
+  await page.locator('[data-action="program-category"][data-category="forms"]').click();
+  await page.getByRole("tab", { name: /Drive archive review/ }).click();
+
+  const library = page.locator('.import-folder-library[aria-label="Drive folder library"]');
+  await expect(library).toBeVisible();
+
+  const rootGroups = library.locator(":scope > .import-folder-group");
+  await expect(rootGroups).toHaveCount(2);
+  await expect(library.locator(
+    ".import-folder-group > .import-folder-summary > .import-folder-title"
+  ))
+    .toHaveText([
+      "Forms & Appendices",
+      "Spanish Translations"
+    ]);
+
+  const formsCollection = library.locator(
+    '[data-folder-headline="Forms & Appendices"][data-folder-path="Forms & Appendices"]'
+  );
+  await expect(page.locator(
+    '[data-folder-headline="Forms & Appendices"] > .import-folder-summary > .import-folder-count'
+  ))
+    .toHaveText("6 files");
+  await expect(formsCollection).toHaveAttribute("open", "");
+  await expect(formsCollection.locator(
+    ":scope > .import-folder-children > .import-folder-category > .import-folder-summary > .import-folder-title"
+  )).toHaveText([
+    "Job Hazard Analysis",
+    "Safety Committee",
+    "Safety Programs",
+    "Training"
+  ]);
+
+  const jha = formsCollection.locator(
+    ':scope > .import-folder-children > .import-folder-category[data-folder-category="Job Hazard Analysis"][data-folder-path="Forms & Appendices / Job Hazard Analysis"]'
+  );
+  await expect(jha.locator(":scope > .import-folder-summary > .import-folder-count"))
+    .toHaveText("2 files");
+  await expect(jha).toHaveAttribute("open", "");
+
+  const northPlant = jha.locator(
+    ':scope > .import-folder-children > .import-folder-category[data-folder-category="North Plant"][data-folder-path="Forms & Appendices / Job Hazard Analysis / North Plant"]'
+  );
+  await expect(northPlant.locator(":scope > .import-folder-summary > .import-folder-count"))
+    .toHaveText("2 files");
+  await expect(northPlant).toHaveAttribute("open", "");
+  await expect(northPlant.locator(
+    ":scope > .import-folder-children > .import-folder-category > .import-folder-summary > .import-folder-title"
+  )).toHaveText(["Department A"]);
+
+  const departmentA = northPlant.locator(
+    ':scope > .import-folder-children > .import-folder-category[data-folder-category="Department A"][data-folder-path="Forms & Appendices / Job Hazard Analysis / North Plant / Department A"]'
+  );
+  await expect(departmentA.locator(":scope > .import-folder-summary > .import-folder-count"))
+    .toHaveText("2 files");
+  await expect(departmentA).toHaveAttribute("open", "");
+  await expect(departmentA.locator(
+    ":scope > .import-folder-children > .import-folder-file-grid > .import-candidate-card h3"
+  )).toHaveText([
+    "Hazard Assessment Checklist.pdf",
+    "Oregon OSHA Quick Reference.pdf"
+  ]);
+
+  const companyCard = departmentA.locator(".import-candidate-card").filter({
+    hasText: "Hazard Assessment Checklist.pdf"
+  });
+  await expect(companyCard.getByText("Company access", { exact: true })).toBeVisible();
+  await expect(companyCard.getByRole("checkbox", { name: "Safety/admin private" })).not.toBeChecked();
+  await expect(companyCard.getByRole("button", { name: "Download original" })).toBeEnabled();
+
+  await page.locator('[data-folder-headline="Forms & Appendices"] > .import-folder-summary').click();
+  await expect(formsCollection).not.toHaveAttribute("open", "");
+  await expect(companyCard).toBeHidden();
+  await page.locator('[data-folder-headline="Forms & Appendices"] > .import-folder-summary').click();
+  await expect(formsCollection).toHaveAttribute("open", "");
+  await expect(companyCard).toBeVisible();
+
+  const formsRootFiles = page.locator(
+    '[data-folder-headline="Forms & Appendices"] > .import-folder-children > .import-folder-file-grid > .import-candidate-card'
+  );
+  await expect(formsRootFiles).toHaveCount(1);
+  await expect(formsRootFiles.locator("h3")).toHaveText(["Unsorted Scan.pdf"]);
+  const privateCard = formsRootFiles.filter({ hasText: "Unsorted Scan.pdf" });
+  await expect(privateCard.getByRole("checkbox", { name: "Safety/admin private" })).toBeChecked();
+  await expect(privateCard.getByRole("checkbox", { name: "Safety/admin private" })).toBeDisabled();
+  await expect(privateCard.getByRole("button", { name: "Download original" })).toBeEnabled();
+
+  const spanishCollection = library.locator(
+    '[data-folder-headline="Spanish Translations"][data-folder-path="Spanish Translations"]'
+  );
+  await expect(spanishCollection.locator(":scope > .import-folder-summary > .import-folder-count"))
+    .toHaveText("2 files");
+  await expect(spanishCollection).not.toHaveAttribute("open", "");
+  await page.locator('[data-folder-headline="Spanish Translations"] > .import-folder-summary').click();
+  await expect(spanishCollection).toHaveAttribute("open", "");
+
+  const spanishJha = spanishCollection.locator(
+    ':scope > .import-folder-children > .import-folder-category[data-folder-category="Job Hazard Analysis"][data-folder-path="Spanish Translations / Job Hazard Analysis"]'
+  );
+  const spanishNorthPlant = spanishJha.locator(
+    ':scope > .import-folder-children > .import-folder-category[data-folder-category="North Plant"][data-folder-path="Spanish Translations / Job Hazard Analysis / North Plant"]'
+  );
+  const machineShop = spanishNorthPlant.locator(
+    ':scope > .import-folder-children > .import-folder-category[data-folder-category="Machine Shop"][data-folder-path="Spanish Translations / Job Hazard Analysis / North Plant / Machine Shop"]'
+  );
+  await expect(spanishJha.locator(":scope > .import-folder-summary > .import-folder-count"))
+    .toHaveText("1 file");
+  await expect(machineShop.locator(".import-candidate-card h3"))
+    .toHaveText(["Guarding Evidence Photo.jpg"]);
+
+  const spanishRootFiles = page.locator(
+    '[data-folder-headline="Spanish Translations"] > .import-folder-children > .import-folder-file-grid > .import-candidate-card'
+  );
+  await expect(spanishRootFiles).toHaveCount(1);
+  await expect(spanishRootFiles.locator("h3")).toHaveText(["Loose Safety Policy.pdf"]);
+  await expect(spanishRootFiles.getByText("Company access", { exact: true })).toBeVisible();
+  await expect(spanishRootFiles.getByRole("button", { name: "Download original" })).toBeEnabled();
+
+  await expect(library.locator(
+    '[data-folder-headline="Uncategorized"], [data-folder-headline="Uncategorized source"]'
+  )).toHaveCount(0);
 });
 
 test("Drive archive secure download authorizes by candidate id", async ({ page }, testInfo) => {

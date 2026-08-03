@@ -367,6 +367,7 @@ function fakeSupabaseScript(options = {}) {
   if (options.importCandidates) {
     const candidateBase = {
       company_id: WORKSPACE_FIXTURE.company.id,
+      source_collection: "Forms & Appendices",
       folder_hint: "Synthetic source / Operations",
       review_status: "pending_review",
       access_scope: "company",
@@ -473,6 +474,46 @@ function fakeSupabaseScript(options = {}) {
         source_path_sha256: "0".repeat(64)
       }
     ];
+    if (options.archiveFolderHierarchy) {
+      const sourceCollections = {
+        "70000000-0000-4000-8000-000000000001": "Forms & Appendices",
+        "70000000-0000-4000-8000-000000000002": "Forms & Appendices",
+        "70000000-0000-4000-8000-000000000003": "Forms & Appendices",
+        "70000000-0000-4000-8000-000000000004": "Forms & Appendices",
+        "70000000-0000-4000-8000-000000000005": "Forms & Appendices",
+        "70000000-0000-4000-8000-000000000006": "Spanish Translations",
+        "70000000-0000-4000-8000-000000000007": "Forms & Appendices"
+      };
+      const folderHints = {
+        "70000000-0000-4000-8000-000000000001": "Job Hazard Analysis / North Plant / Department A",
+        "70000000-0000-4000-8000-000000000002": "Safety Committee / North Plant Committee Docs / 2019",
+        "70000000-0000-4000-8000-000000000003": "Safety Programs / Hearing Conservation",
+        "70000000-0000-4000-8000-000000000004": "Training / Powered Industrial Trucks",
+        "70000000-0000-4000-8000-000000000005": "Job Hazard Analysis / North Plant / Department A",
+        "70000000-0000-4000-8000-000000000006": "Job Hazard Analysis / North Plant / Machine Shop",
+        "70000000-0000-4000-8000-000000000007": null
+      };
+      tables.safety_program_import_candidates.forEach((candidate) => {
+        candidate.source_collection = sourceCollections[candidate.id];
+        candidate.folder_hint = folderHints[candidate.id];
+      });
+      tables.safety_program_import_candidates.push({
+        ...candidateBase,
+        id: "70000000-0000-4000-8000-000000000009",
+        display_name: "Loose Safety Policy.pdf",
+        source_collection: "Spanish Translations",
+        folder_hint: "Drive root",
+        candidate_kind: "reference",
+        classification: "internal",
+        proposed_location_codes: [],
+        page_count: 1,
+        render_verified: true,
+        mime_type: "application/pdf",
+        size_bytes: 40960,
+        content_sha256: "9".repeat(64),
+        source_path_sha256: "9".repeat(64)
+      });
+    }
     if (options.mislabeledCandidate) {
       tables.safety_program_import_candidates.push({
         ...candidateBase,

@@ -1260,7 +1260,7 @@
           .limit(1000),
         supabaseClient
           .from("safety_program_import_candidates")
-          .select("id, company_id, display_name, folder_hint, candidate_kind, review_status, access_scope, classification, language, proposed_location_codes, page_count, render_verified, mime_type, size_bytes, content_sha256, source_path_sha256, created_at")
+          .select("id, company_id, display_name, source_collection, folder_hint, candidate_kind, review_status, access_scope, classification, language, proposed_location_codes, page_count, render_verified, mime_type, size_bytes, content_sha256, source_path_sha256, created_at")
           .eq("company_id", membership.company_id)
           .order("display_name", { ascending: true })
           .limit(2000)
@@ -2299,6 +2299,7 @@
           id: candidate.id,
           title: candidate.display_name || "Unnamed source item",
           displayName: candidate.display_name || "Unnamed source item",
+          sourceCollection: String(candidate.source_collection || "").trim(),
           folderHint: candidate.folder_hint || "Source folder not classified",
           candidateKind: candidate.candidate_kind || "unknown",
           classification: candidate.classification || "unknown",
@@ -3817,6 +3818,7 @@
       item.filename,
       item.sha256,
       item.displayName,
+      item.sourceCollection,
       item.folderHint,
       item.candidateKind,
       item.classification,
@@ -3837,6 +3839,192 @@
       programMatchesLocation(item) &&
       (!query || programSearchText(item).includes(query))
     ));
+  }
+
+  const importSourceFallbackLabel = "Uncategorized source";
+  const importRootFolderAliases = new Set([
+    "",
+    "drive root",
+    "root",
+    "source folder not classified",
+    "folder not classified",
+    "not classified",
+    "unclassified",
+    "unknown",
+    "uncategorized"
+  ]);
+  const importFolderCollator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: "variant"
+  });
+
+  function importCandidateSourceCollection(sourceCollection) {
+    return String(sourceCollection || "").trim() || importSourceFallbackLabel;
+  }
+
+  function importCandidateFolderSegments(folderHint) {
+    const segments = String(folderHint || "")
+      .replaceAll("\\", "/")
+      .split("/")
+      .map((segment) => segment.trim())
+      .filter(Boolean);
+    const firstSegment = String(segments[0] || "").toLowerCase();
+    if (!segments.length || importRootFolderAliases.has(firstSegment)) {
+      return segments.slice(1);
+    }
+    return segments;
+  }
+
+  function importFolderYear(name) {
+    return /^\d{4}$/.test(String(name || "")) ? Number(name) : null;
+  }
+
+  function compareImportFolderNodes(left, right) {
+    if (left.isUncategorizedSource !== right.isUncategorizedSource) {
+      return left.isUncategorizedSource ? 1 : -1;
+    }
+    const leftYear = importFolderYear(left.name);
+    const rightYear = importFolderYear(right.name);
+    if (leftYear !== null && rightYear !== null && leftYear !== rightYear) {
+      return rightYear - leftYear;
+    }
+    return importFolderCollator.compare(left.name, right.name);
+  }
+
+  function compareImportCandidateFiles(left, right) {
+    const byDisplayName = importFolderCollator.compare(
+      left.displayName || left.title || "",
+      right.displayName || right.title || ""
+    );
+    if (byDisplayName) return byDisplayName;
+    const bySourcePath = String(left.sourcePathSha256 || "")
+      .localeCompare(String(right.sourcePathSha256 || ""));
+    if (bySourcePath) return bySourcePath;
+    return String(left.id || "").localeCompare(String(right.id || ""));
+  }
+
+  function buildImportCandidateFolderTree(items) {
+    const roots = new Map();
+    items.forEach((item) => {
+      const collectionName = importCandidateSourceCollection(item.sourceCollection);
+      if (!roots.has(collectionName)) {
+        roots.set(collectionName, {
+          name: collectionName,
+          isSourceCollection: true,
+          isUncategorizedSource: collectionName === importSourceFallbackLabel,
+          items: [],
+          children: new Map()
+        });
+      }
+      const segments = importCandidateFolderSegments(item.folderHint);
+      let node = roots.get(collectionName);
+      let folderMap = node.children;
+      segments.forEach((segment) => {
+        if (!folderMap.has(segment)) {
+          folderMap.set(segment, {
+            name: segment,
+            isSourceCollection: false,
+            isUncategorizedSource: false,
+            items: [],
+            children: new Map()
+          });
+        }
+        node = folderMap.get(segment);
+        folderMap = node.children;
+      });
+      node.items.push(item);
+    });
+
+    function finalizeNode(node) {
+      const children = [...node.children.values()]
+        .map(finalizeNode)
+        .sort(compareImportFolderNodes);
+      const sortedItems = [...node.items].sort(compareImportCandidateFiles);
+      return {
+        ...node,
+        items: sortedItems,
+        children,
+        itemCount: sortedItems.length + children.reduce((sum, child) => sum + child.itemCount, 0),
+        folderCount: children.length + children.reduce((sum, child) => sum + child.folderCount, 0)
+      };
+    }
+
+    return [...roots.values()]
+      .map(finalizeNode)
+      .sort(compareImportFolderNodes);
+  }
+
+  function renderImportCandidateFolder(node, options = {}) {
+    const depth = Number(options.depth || 0);
+    const parentPath = options.parentPath || [];
+    const folderPath = [...parentPath, node.name];
+    const isHeadline = depth === 0;
+    const folderClass = isHeadline ? "import-folder-group" : "import-folder-category";
+    const folderDataAttribute = isHeadline ? "data-folder-headline" : "data-folder-category";
+    const folderDataValue = node.name;
+    const shouldOpen = Boolean(options.expandAll || options.openBranch);
+    const directFileCount = node.items.length;
+    const childFolderCount = node.children.length;
+    const directFilesLabel = directFileCount
+      ? `<p class="import-folder-direct-label">${directFileCount} file${directFileCount === 1 ? "" : "s"} stored directly in this ${isHeadline ? "source collection" : "folder"}</p>`
+      : "";
+    return `
+      <details class="${folderClass}${node.isUncategorizedSource ? " is-uncategorized" : ""}" ${folderDataAttribute}="${escapeHtml(folderDataValue)}" data-folder-path="${escapeHtml(folderPath.join(" / "))}" data-folder-depth="${depth}" ${shouldOpen ? "open" : ""}>
+        <summary class="import-folder-summary">
+          <span class="import-folder-glyph" aria-hidden="true"></span>
+          <span class="import-folder-title">${escapeHtml(node.name)}</span>
+          <span class="import-folder-count">${node.itemCount} file${node.itemCount === 1 ? "" : "s"}</span>
+          <span class="import-folder-disclosure" aria-hidden="true"></span>
+          ${node.isUncategorizedSource
+            ? `<span class="import-folder-note">Source collection not identified</span>`
+            : isHeadline
+              ? `<span class="import-folder-note">${node.folderCount
+                  ? `${node.folderCount} folder${node.folderCount === 1 ? "" : "s"} in this source collection`
+                  : "Source collection root"}</span>`
+              : childFolderCount
+                ? `<span class="import-folder-note">${childFolderCount} subfolder${childFolderCount === 1 ? "" : "s"}</span>`
+                : ""}
+        </summary>
+        <div class="import-folder-children">
+          ${directFilesLabel}
+          ${directFileCount ? `
+            <div class="import-folder-file-grid program-grid import-archive-grid">
+              ${node.items.map(renderImportCandidateCard).join("")}
+            </div>
+          ` : ""}
+          ${childFolderCount
+            ? node.children.map((child, index) => renderImportCandidateFolder(child, {
+                depth: depth + 1,
+                parentPath: folderPath,
+                openBranch: Boolean(options.openBranch && index === 0),
+                expandAll: options.expandAll
+              })).join("")
+            : ""}
+        </div>
+      </details>
+    `;
+  }
+
+  function renderImportCandidateLibrary(rows) {
+    if (!rows.length) {
+      return renderEmptyState("⌕", "No source items found", "Try another folder, location, filter, or search term.");
+    }
+    const folders = buildImportCandidateFolderTree(rows);
+    const expandAll = Boolean(
+      state.programQuery.trim()
+      || state.formArchiveKind !== "all"
+      || state.formArchiveStatus !== "all"
+    );
+    return `
+      <div class="import-folder-library" aria-label="Drive folder library">
+        ${folders.map((folder, index) => renderImportCandidateFolder(folder, {
+          depth: 0,
+          parentPath: [],
+          openBranch: index === 0,
+          expandAll
+        })).join("")}
+      </div>
+    `;
   }
 
   function renderOriginalFormCard(item) {
@@ -4204,9 +4392,11 @@
             </div>
             <span class="private-source-badge">Access-controlled</span>
           </div>
-          <div class="program-grid ${state.programCategory === "forms" && state.formLibraryMode === "archive" ? "import-archive-grid" : ""}">
+          ${state.programCategory === "forms" && state.formLibraryMode === "archive"
+            ? renderImportCandidateLibrary(rows)
+            : `<div class="program-grid">
             ${rows.map(renderProgramCard).join("") || renderEmptyState("⌕", "No source items found", "Try another category, location, or search term.")}
-          </div>
+              </div>`}
         </div>
       </section>
       <div style="height:14px"></div>

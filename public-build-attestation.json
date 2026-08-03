@@ -4,8 +4,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 393333,
-      "sha256": "91cc22e4a98ae05a6e93656d855a678856422775d4e6983c7af0d265aab9c396"
+      "bytes": 400752,
+      "sha256": "db6c3152ce65b1819dca3b56d291cefe632a44531e5f98312740d3b14d2ebb91"
     },
     {
       "path": "data.js",
@@ -44,8 +44,8 @@
     },
     {
       "path": "styles.css",
-      "bytes": 133151,
-      "sha256": "e2f63708fcf3318cc4d37b168aa650f4e1b5b5509e7d543c16f1f28836856835"
+      "bytes": 138118,
+      "sha256": "8b47b38f1404e78a3d35a60d9c6907fc8a4d91cc9bf9d17a0a5f6168c4a2ae06"
     },
     {
       "path": "supabase-config.js",
@@ -63,7 +63,7 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "aggregateSha256": "6b732f94f3e2b366d84957c5594b1439058a0011dd26fe207502064dd31e8aa1",
+  "aggregateSha256": "2633751d5673988cca23119d1c4504bc1424321ebf5717a677800f0f723187af",
   "releaseFiles": [
     {
       "path": ".github/workflows/deploy-pages.yml",
@@ -77,8 +77,8 @@
     },
     {
       "path": "app.js",
-      "bytes": 393333,
-      "sha256": "91cc22e4a98ae05a6e93656d855a678856422775d4e6983c7af0d265aab9c396"
+      "bytes": 400752,
+      "sha256": "db6c3152ce65b1819dca3b56d291cefe632a44531e5f98312740d3b14d2ebb91"
     },
     {
       "path": "data.js",
@@ -92,8 +92,8 @@
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 12478,
-      "sha256": "d34ca46234f41a4b81adbe65d4fb6d8f41138b751f8e2fd9534bddcc79269bc0"
+      "bytes": 12830,
+      "sha256": "7c86978c20316503e6b28cbe39362af668ada6d83275e4edac5d47ae38d1cda6"
     },
     {
       "path": "docs/competitive-research.md",
@@ -107,8 +107,8 @@
     },
     {
       "path": "docs/form-originals-and-templates.md",
-      "bytes": 6618,
-      "sha256": "88fa6bba919b4ade1ecfebe278b8f79ebea364a2821706743563a6515335c0dd"
+      "bytes": 7406,
+      "sha256": "30a6033fb70fe6597e33f4ed54ab07e9f925f2064bdf3ff214fe58b7b650dfb2"
     },
     {
       "path": "docs/google-drive-safety-program-ingestion.md",
@@ -127,13 +127,13 @@
     },
     {
       "path": "docs/KNOWN_RISKS.md",
-      "bytes": 8629,
-      "sha256": "3acd0a029bd6dce3aa449eebf0cd7ca146da6472a820831a62b3898b28567612"
+      "bytes": 8690,
+      "sha256": "7fba6c5c5ba644bad0bfc4d94d4c502233ec0f9eeea1fb8d1a1d9a5e3317c100"
     },
     {
       "path": "docs/LFES/CONTROL_MATRIX.md",
-      "bytes": 6154,
-      "sha256": "e1d10d0aa78ce8677383d954d21537808eccea2c1795327daaec76560bc4f92d"
+      "bytes": 6255,
+      "sha256": "04528de06888f337be90f90fb5cf3a29eeecdd420e839d642b5bd5ddf2310bc9"
     },
     {
       "path": "docs/LFES/DECISIONS_AND_ASSUMPTIONS.md",
@@ -142,13 +142,13 @@
     },
     {
       "path": "docs/LFES/PROOF_MODEL.md",
-      "bytes": 3995,
-      "sha256": "0be38d5f88f6bd96f4d065e9e934e1e173737ee8cef9659bd455651f1a4115ff"
+      "bytes": 4071,
+      "sha256": "e9edc17d6f820d5f05b48110e0d23674e6851eb06a2ec7775b1aa9a733917d59"
     },
     {
       "path": "docs/LFES/README.md",
-      "bytes": 3221,
-      "sha256": "9d10472ef00e49f632a62dfc5105a07008166f0d60e3bbb05ea78557d10ee47b"
+      "bytes": 3224,
+      "sha256": "a1e00ab66b93ec136dfa5ca9f9ccf83a495fcbe3597bf4b027b71d5c4c34c4fb"
     },
     {
       "path": "docs/osha-corpus-manifest.json",
@@ -167,13 +167,13 @@
     },
     {
       "path": "docs/QA_LOG.md",
-      "bytes": 8651,
-      "sha256": "5e52438fb9b6c05599b6ee149e7fd8ba1cf897f17f52435a1193f0f762fd7d63"
+      "bytes": 9368,
+      "sha256": "34e70d860ede1a05a0419646712a53eec7a59f4ad9d88d4caff9898e548ad243"
     },
     {
       "path": "docs/RELEASE_CHECKLIST.md",
-      "bytes": 9226,
-      "sha256": "1b6ecdc259532976ed355b50c1090d080e02811dadaa8ba093d1ffb1765d914f"
+      "bytes": 9806,
+      "sha256": "20a7ac31e27897f09cf451f7210b88196db6fd0e481273f7a77212a40205f371"
     },
     {
       "path": "docs/safety-programs-schema.md",
@@ -217,8 +217,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 16511,
-      "sha256": "47dda327d4739e2ad528da254479d9a1ce88e077834801b9f40a78e57e3a2854"
+      "bytes": 16741,
+      "sha256": "67232e5da9996fbe528b9602265f80d74bebae25903b63185863020788ff1e7c"
     },
     {
       "path": "safety-program-extracts.js",
@@ -257,8 +257,8 @@
     },
     {
       "path": "scripts/ingest-drive-zip-archive.mjs",
-      "bytes": 28061,
-      "sha256": "7fa5ca8b03ad5de73ff3d4b5a0f3303de47602a2380f20f9841e7b534da614de"
+      "bytes": 29028,
+      "sha256": "af615e328077f11570799c500b652fe0475d264723ff93a5b2d4cabee25b652e"
     },
     {
       "path": "scripts/ingest-google-drive-safety-manifest.mjs",
@@ -287,8 +287,8 @@
     },
     {
       "path": "styles.css",
-      "bytes": 133151,
-      "sha256": "e2f63708fcf3318cc4d37b168aa650f4e1b5b5509e7d543c16f1f28836856835"
+      "bytes": 138118,
+      "sha256": "8b47b38f1404e78a3d35a60d9c6907fc8a4d91cc9bf9d17a0a5f6168c4a2ae06"
     },
     {
       "path": "supabase-config.example.js",
@@ -307,8 +307,8 @@
     },
     {
       "path": "supabase/functions/drive-safety-ingest/index.ts",
-      "bytes": 37762,
-      "sha256": "f5596503270c20439cd02c3197bada4caca079cb1b523f3247ee360eec3792bf"
+      "bytes": 38197,
+      "sha256": "f08e6c0d79caf0136ac8e97f75cdd38b0614052c2b0a213de7baa42004a96562"
     },
     {
       "path": "supabase/functions/employee-document-file/index.ts",
@@ -406,9 +406,14 @@
       "sha256": "4a98c3c684e8ef7ac4e9bb78a6cd57385e1846e4e5a39c2eaedd32b2d8597516"
     },
     {
+      "path": "supabase/migrations/202608030018_source_collection_hierarchy.sql",
+      "bytes": 13583,
+      "sha256": "173b97ac95fe8ff0548ac39e7e5f548d03eb53801d7380cf2ce4020e4db82aee"
+    },
+    {
       "path": "supabase/README.md",
-      "bytes": 17137,
-      "sha256": "6fb6c252ce35c2dabdaa7ff8ef4bacfba3a08103bf5144533ccabd513345d35b"
+      "bytes": 17520,
+      "sha256": "4617dda3a4cf6dfdf8fdefbc14779528bcd402d6f959045afef5f26773e5ea06"
     },
     {
       "path": "tenant-bootstrap.js",
@@ -427,8 +432,8 @@
     },
     {
       "path": "tests/helpers/authenticated-workspace.js",
-      "bytes": 87204,
-      "sha256": "fe08514d0b26c9b5faeae17008c88ffc02d9b86f8192503e7a7dcaa8a93086b3"
+      "bytes": 89304,
+      "sha256": "55f0b309c57dc1e70a9b1ded269eff3f53bfedd704f528628e9e16a6141c3ec5"
     },
     {
       "path": "tests/osha-reference.spec.js",
@@ -437,8 +442,8 @@
     },
     {
       "path": "tests/safety-programs.spec.js",
-      "bytes": 21000,
-      "sha256": "11113c8e5ecca94ad3c7660768919faba20ee27469d45a13850911aa0acac76b"
+      "bytes": 27728,
+      "sha256": "f1ff8d263f90d8a922a3083b6d70520707e3dd7097793962fa0c14322d97b185"
     },
     {
       "path": "tests/safety-workflows.spec.js",
@@ -456,5 +461,5 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "releaseAggregateSha256": "ae295caded894dfdee39b6ad08ada584903ee1d26379b81d01e7ab52fb1b714e"
+  "releaseAggregateSha256": "8c9cb3914f260780a451dfea770331806dc34869a5ea0bea406785186e76a051"
 }

@@ -179,6 +179,14 @@ function hasControlCharacters(value: string) {
   return false;
 }
 
+function validSourceCollection(value: unknown): value is string {
+  return isBoundedString(value, 1, 255) &&
+    value.trim() === value &&
+    !value.includes("\\") &&
+    !value.includes("/") &&
+    !hasControlCharacters(value);
+}
+
 function validFilename(value: unknown): value is string {
   return isBoundedString(value, 1, 255) &&
     !value.includes("\\") &&
@@ -257,14 +265,17 @@ async function validateManifest(manifest: unknown) {
     return { valid: false, reason: "invalid_snapshot_lineage" } as const;
   }
   const snapshotKeys = new Set<string>();
-  const snapshotExpected = new Map<string, { itemCount: number; totalBytes: number }>();
+  const snapshotExpected = new Map<string, {
+    itemCount: number;
+    totalBytes: number;
+    sourceCollection: string;
+  }>();
   const snapshotActual = new Map<string, { itemCount: number; totalBytes: number }>();
   for (const snapshot of snapshotsValue) {
     if (!isRecord(snapshot) ||
         !isBoundedString(snapshot.snapshot_key, 1, 200) ||
         !isBoundedString(snapshot.folder_id, 1, 255) ||
-        !isBoundedString(snapshot.folder_name, 1, 255) ||
-        hasControlCharacters(snapshot.folder_name) ||
+        !validSourceCollection(snapshot.folder_name) ||
         !validFilename(snapshot.zip_file) ||
         !Number.isSafeInteger(Number(snapshot.zip_bytes)) || Number(snapshot.zip_bytes) < 1 ||
         !sha256Pattern.test(String(snapshot.zip_sha256 ?? "")) ||
@@ -278,7 +289,8 @@ async function validateManifest(manifest: unknown) {
     snapshotKeys.add(snapshot.snapshot_key);
     snapshotExpected.set(snapshot.snapshot_key, {
       itemCount: Number(snapshot.item_count),
-      totalBytes: Number(snapshot.total_bytes)
+      totalBytes: Number(snapshot.total_bytes),
+      sourceCollection: snapshot.folder_name
     });
     snapshotActual.set(snapshot.snapshot_key, { itemCount: 0, totalBytes: 0 });
   }
@@ -327,7 +339,10 @@ async function validateManifest(manifest: unknown) {
     const filenameExtension = filename.includes(".")
       ? filename.split(".").pop()?.toLowerCase() ?? ""
       : "";
-    if (filenameExtension !== extension || await sha256Hex(sourcePath) !== sourcePathHash) {
+    const sourceSnapshot = snapshotExpected.get(snapshotKey);
+    if (!sourceSnapshot ||
+        sourcePath.split("/", 1)[0].trim() !== sourceSnapshot.sourceCollection ||
+        filenameExtension !== extension || await sha256Hex(sourcePath) !== sourcePathHash) {
       return { valid: false, reason: "manifest_path_mismatch" } as const;
     }
     if (mimeType === "application/pdf" &&

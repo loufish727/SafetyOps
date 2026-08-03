@@ -143,6 +143,24 @@ function isRecord(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function hasControlCharacters(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code < 32 || code === 127) return true;
+  }
+  return false;
+}
+
+function validSourceCollection(value) {
+  return typeof value === "string" &&
+    value.length >= 1 &&
+    value.length <= 255 &&
+    value.trim() === value &&
+    !value.includes("/") &&
+    !value.includes("\\") &&
+    !hasControlCharacters(value);
+}
+
 function safeArtifactPath(root, relativePath) {
   if (
     typeof relativePath !== "string" ||
@@ -273,16 +291,19 @@ function validateManifestStructure(manifest, artifactRoots) {
     throw new Error("manifest is not a complete Google Drive ZIP snapshot");
   }
   const snapshotKeys = new Set();
+  const sourceCollections = new Map();
   for (const snapshot of manifest.snapshot.snapshots) {
     if (
       !isRecord(snapshot) ||
       typeof snapshot.snapshot_key !== "string" ||
       snapshotKeys.has(snapshot.snapshot_key) ||
+      !validSourceCollection(snapshot.folder_name) ||
       !SHA256_RE.test(String(snapshot.zip_sha256 ?? ""))
     ) {
       throw new Error("manifest has invalid or duplicate snapshot lineage");
     }
     snapshotKeys.add(snapshot.snapshot_key);
+    sourceCollections.set(snapshot.snapshot_key, snapshot.folder_name);
     if (!artifactRoots.has(snapshot.snapshot_key)) {
       throw new Error(`missing --artifact-root for snapshot ${snapshot.snapshot_key}`);
     }
@@ -301,11 +322,11 @@ function validateManifestStructure(manifest, artifactRoots) {
   if (Number(manifest.item_count) !== manifest.items.length) {
     throw new Error("manifest item_count does not match its items");
   }
-  return { snapshotKeys, computedManifestSha256 };
+  return { snapshotKeys, sourceCollections, computedManifestSha256 };
 }
 
 async function verifyArtifacts(manifest, artifactRoots) {
-  validateManifestStructure(manifest, artifactRoots);
+  const { sourceCollections } = validateManifestStructure(manifest, artifactRoots);
   const itemKeys = new Set();
   const sourcePathHashes = new Set();
   const verifiedByItemKey = new Map();
@@ -330,6 +351,13 @@ async function verifyArtifacts(manifest, artifactRoots) {
       throw new Error(`manifest item ${index + 1} has an invalid source-path fingerprint`);
     }
     sourcePathHashes.add(item.source_path_sha256);
+    const sourceCollection = sourceCollections.get(item.snapshot_key);
+    if (
+      !sourceCollection ||
+      item.source_path.split("/", 1)[0].trim() !== sourceCollection
+    ) {
+      throw new Error(`manifest item ${index + 1} source path does not match its snapshot folder`);
+    }
     const allowedMimes = item.extension === ".dng"
       ? new Set(["image/x-adobe-dng", "image/jpeg"])
       : new Set([MIME_BY_EXTENSION[item.extension]]);
