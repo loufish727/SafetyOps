@@ -3307,6 +3307,12 @@ a.citation-chip:hover {
   border-left-width: 4px;
 }
 
+.import-candidate-card .program-card-top {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
 .import-candidate-card.kind-form {
   border-color: color-mix(in srgb, var(--blue) 42%, var(--line));
 }
@@ -3337,7 +3343,8 @@ a.citation-chip:hover {
 
 .import-kind-badge,
 .import-review-badge,
-.import-sensitivity-badge {
+.import-sensitivity-badge,
+.import-access-badge {
   display: inline-flex;
   min-height: 24px;
   align-items: center;
@@ -3349,6 +3356,18 @@ a.citation-chip:hover {
   font-size: 8px;
   font-weight: 800;
   letter-spacing: 0.025em;
+}
+
+.import-access-badge.company {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.import-access-badge.private {
+  border-color: color-mix(in srgb, var(--purple) 38%, var(--line));
+  background: var(--purple-soft);
+  color: var(--purple);
 }
 
 .import-sensitivity-badge.internal {
@@ -4272,6 +4291,106 @@ a.citation-chip:hover {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 8px;
   overflow-wrap: anywhere;
+}
+
+.candidate-review-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--blue-soft) 34%, var(--surface));
+}
+
+.candidate-privacy-control {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.candidate-privacy-control input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--purple);
+}
+
+.candidate-privacy-control label {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.candidate-privacy-control input:disabled + label {
+  cursor: default;
+  opacity: 0.74;
+}
+
+.candidate-access-help,
+.candidate-member-access-note,
+.candidate-download-unavailable {
+  display: block !important;
+  margin: 0 !important;
+  color: var(--muted-strong) !important;
+  font-size: 9px !important;
+  line-height: 1.5;
+  -webkit-line-clamp: unset !important;
+}
+
+.candidate-member-access-note {
+  margin-top: 12px !important;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: 9px;
+  background: var(--accent-soft);
+}
+
+.candidate-review-field {
+  display: grid;
+  gap: 6px;
+}
+
+.candidate-review-field label {
+  color: var(--muted-strong);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.candidate-review-field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.candidate-review-save,
+.import-candidate-card .program-card-actions .button {
+  min-height: 44px;
+}
+
+.candidate-review-save {
+  width: 100%;
+}
+
+.candidate-download-unavailable {
+  margin-top: 8px !important;
+  padding: 8px 9px;
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, var(--line));
+  border-radius: 8px;
+  background: var(--amber-soft);
+  color: var(--amber) !important;
+  font-weight: 750;
 }
 
 /* Interactive form builder */

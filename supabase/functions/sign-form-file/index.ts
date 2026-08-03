@@ -4,7 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
 /**
  * Authenticated request contract (exactly one selector):
  *   { form_file_id: uuid }       existing published-form authorization path
- *   { candidate_id: uuid }       manager-only import-candidate path
+ *   { candidate_id: uuid }       access-scoped import-candidate path
  * Success returns { signed_url, expires_at, filename, mime_type, size_bytes,
  * content_sha256, page_count, render_verified, request_id }. Completeness
  * fields are null on the legacy form-file path. Raw bucket/object paths and
@@ -129,7 +129,8 @@ Deno.serve(async (request) => {
   const actorUserId = userResult.data.user.id;
 
   // Both RPCs make the authorization decision under the caller's JWT and omit
-  // bucket/object paths. Candidate metadata is manager-only in PostgreSQL.
+  // bucket/object paths. PostgreSQL authorizes company-visible candidates for
+  // active tenant members and safety/admin-private candidates for managers.
   const metadataResult = isCandidate
     ? await callerClient.rpc("get_safety_program_import_candidate_file_metadata", {
         target_candidate_id: candidateId

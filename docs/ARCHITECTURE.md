@@ -22,12 +22,14 @@ flowchart LR
 ```
 
 This is the target architecture represented by source. The public shell has an
-exact signed release process. Migration `016` passed a hosted rollback compile,
-was applied on 2026-08-03, and has a ledger entry bound to the reviewed source
-SHA-256. Named live catalog, RLS, and anonymous-grant checks passed, and the
-employee-document Edge Function is active with JWT verification. That evidence
-does not prove historical migration checksums, the full cross-role and
-tenant-isolation matrix, configured scanner behavior, or complete workflows.
+exact signed release process. Migrations `016` and `017` passed hosted rollback
+compilation, were applied on 2026-08-03, and have ledger entries bound to their
+reviewed source SHA-256 values. Migration `017` live checks prove the candidate
+scope counts, fail-closed invariant, RLS, table grants, and RPC grants. Named
+employee-workflow catalog checks also passed, and the employee-document Edge
+Function is active with JWT verification. That evidence does not prove legacy
+migration checksums, the full cross-role and tenant-isolation matrix,
+configured scanner behavior, or complete workflows.
 
 ## Public layer
 
@@ -153,12 +155,17 @@ Migrations must be applied in filename order:
     location assignments, committee minutes, employee-owned actions and
     training, employee PDF evidence, and 15-minute one-time employee form
     handoffs with immutable submission hashes.
+17. `202608030017_candidate_access_review.sql`: company-visible versus
+    safety/admin-private Drive candidates, fail-closed sensitive-record rules,
+    manager review transitions, scoped downloads, and append-only review audit
+    events.
 
 The critical intended boundaries are `private.is_company_member`,
 `private.can_manage_company`, `private.can_access_location`, RLS policies,
 foreign keys that repeat `company_id`, and pinned `search_path` values on
 security-definer functions. Hosted application and ledger evidence for
-migration `016`, plus the final `010`–`012` compatibility sequence, are proven;
+migrations `016` and `017`, plus the final `010`–`012` compatibility sequence,
+are proven;
 exact legacy file identity and the complete runtime role and tenant-denial
 matrix are not.
 

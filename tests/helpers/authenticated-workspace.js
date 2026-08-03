@@ -369,6 +369,7 @@ function fakeSupabaseScript(options = {}) {
       company_id: WORKSPACE_FIXTURE.company.id,
       folder_hint: "Synthetic source / Operations",
       review_status: "pending_review",
+      access_scope: "company",
       language: "en",
       proposed_location_codes: ["LOC-01"],
       page_count: null,
@@ -399,6 +400,7 @@ function fakeSupabaseScript(options = {}) {
         candidate_kind: "completed_record",
         classification: "restricted",
         review_status: "reviewed",
+        access_scope: "safety_admin_private",
         page_count: 4,
         render_verified: true,
         mime_type: "application/pdf",
@@ -412,6 +414,7 @@ function fakeSupabaseScript(options = {}) {
         display_name: "Hearing Conservation Program.docx",
         candidate_kind: "program_document",
         classification: "internal",
+        access_scope: "safety_admin_private",
         mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         size_bytes: 225280,
         content_sha256: "3".repeat(64),
@@ -447,6 +450,7 @@ function fakeSupabaseScript(options = {}) {
         display_name: "Guarding Evidence Photo.jpg",
         candidate_kind: "evidence",
         classification: "internal",
+        access_scope: "safety_admin_private",
         mime_type: "image/jpeg",
         size_bytes: 94208,
         content_sha256: "6".repeat(64),
@@ -458,6 +462,7 @@ function fakeSupabaseScript(options = {}) {
         display_name: "Unsorted Scan.pdf",
         candidate_kind: "unknown",
         classification: "internal",
+        access_scope: "safety_admin_private",
         language: "en",
         proposed_location_codes: [],
         page_count: 2,
@@ -475,6 +480,7 @@ function fakeSupabaseScript(options = {}) {
         display_name: "Mislabeled Photo.pdf",
         candidate_kind: "evidence",
         classification: "internal",
+        access_scope: "safety_admin_private",
         proposed_location_codes: [],
         mime_type: "image/jpeg",
         size_bytes: 8192,
@@ -725,6 +731,11 @@ function fakeSupabaseScript(options = {}) {
         return String(left).localeCompare(String(right), undefined, { numeric: true });
       }
 
+      function candidateRequiresPrivateAccess(candidate) {
+        return ["confidential", "restricted"].includes(candidate?.classification)
+          || ["completed_record", "evidence", "unknown"].includes(candidate?.candidate_kind);
+      }
+
       function executeQuery(tableName, filters, ordering, maximum) {
         syncSharedWorkflowState();
         var rows = (tables[tableName] || []).filter(function (row) {
@@ -732,6 +743,14 @@ function fakeSupabaseScript(options = {}) {
             return row[filter.column] === filter.value;
           });
         });
+        if (
+          tableName === "safety_program_import_candidates"
+          && !["corporate_admin", "safety_manager"].includes(tables.company_memberships[0]?.role)
+        ) {
+          rows = rows.filter(function (row) {
+            return row.access_scope === "company" && !candidateRequiresPrivateAccess(row);
+          });
+        }
         ordering.slice().reverse().forEach(function (rule) {
           rows.sort(function (left, right) {
             var result = compareValues(left[rule.column], right[rule.column]);
@@ -910,6 +929,49 @@ function fakeSupabaseScript(options = {}) {
 
       function fixtureTokenSha256(token) {
         return String(token || "").split("").reverse().join("");
+      }
+
+      function rpcUpdateImportCandidateReview(payload) {
+        var role = tables.company_memberships[0]?.role;
+        if (!["corporate_admin", "safety_manager"].includes(role)) {
+          return { data: null, error: { message: "Only a safety administrator may update archive review controls." } };
+        }
+        var candidate = (tables.safety_program_import_candidates || []).find(function (row) {
+          return row.id === payload.target_candidate_id;
+        });
+        if (!candidate) {
+          return { data: null, error: { message: "Import candidate not found." } };
+        }
+        var accessScope = String(payload.target_access_scope || "");
+        var reviewStatus = String(payload.target_review_status || "");
+        var allowedStatuses = [
+          "pending_review",
+          "needs_information",
+          "approved",
+          "rejected",
+          "duplicate",
+          "imported",
+          "superseded"
+        ];
+        if (!["company", "safety_admin_private"].includes(accessScope)) {
+          return { data: null, error: { message: "Import candidate access scope is invalid." } };
+        }
+        if (!allowedStatuses.includes(reviewStatus)) {
+          return { data: null, error: { message: "Import candidate review status is invalid." } };
+        }
+        if (candidateRequiresPrivateAccess(candidate) && accessScope === "company") {
+          return { data: null, error: { message: "Restricted or sensitive candidates must remain safety/admin private." } };
+        }
+        candidate.access_scope = accessScope;
+        candidate.review_status = reviewStatus;
+        return {
+          data: [{
+            candidate_id: candidate.id,
+            access_scope: candidate.access_scope,
+            review_status: candidate.review_status
+          }],
+          error: null
+        };
       }
 
       function rpcCreateEmployee(payload) {
@@ -1892,6 +1954,9 @@ function fakeSupabaseScript(options = {}) {
           if (name === "sign_employee_document") {
             return Promise.resolve(rpcSignEmployeeDocument(payload));
           }
+          if (name === "update_safety_program_import_candidate_review") {
+            return Promise.resolve(rpcUpdateImportCandidateReview(payload));
+          }
           if (name === "assign_employee_form") {
             return Promise.resolve(rpcAssignEmployeeForm(payload));
           }
@@ -1983,7 +2048,12 @@ function fakeSupabaseScript(options = {}) {
               var candidate = (tables.safety_program_import_candidates || []).find(function (row) {
                 return row.id === invokeOptions.body.candidate_id;
               });
-              var responseMetadata = candidate ? {
+              var role = tables.company_memberships[0]?.role;
+              var candidateAuthorized = candidate && (
+                ["corporate_admin", "safety_manager"].includes(role)
+                || (candidate.access_scope === "company" && !candidateRequiresPrivateAccess(candidate))
+              );
+              var responseMetadata = candidateAuthorized ? {
                 signed_url: "https://safetyops-test.supabase.co/storage/v1/object/sign/safety-program-private/authorized-original",
                 expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
                 filename: candidate.display_name,
@@ -1998,7 +2068,7 @@ function fakeSupabaseScript(options = {}) {
               }
               return Promise.resolve({
                 data: responseMetadata,
-                error: responseMetadata ? null : { message: "Candidate not found." }
+                error: responseMetadata ? null : { message: "Candidate file access denied." }
               });
             }
             return Promise.resolve({ data: null, error: { message: "Function fixture rejected the request." } });

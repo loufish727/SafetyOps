@@ -2,7 +2,7 @@
 
 SafetyOps keeps three records separate:
 
-- **Original:** the exact PDF, DOCX, XLSX, or approved scan received from Drive or uploaded by a safety administrator. It is private, hash-addressed, malware-scanned, and immutable.
+- **Original:** the exact PDF, DOCX, XLSX, or approved scan received from Drive or uploaded by a safety administrator. It is stored privately, hash-addressed, malware-scanned, immutable, and released only through a scoped signed download.
 - **Template:** the interactive, versioned field schema created from an original or authored directly in SafetyOps. Publishing pins its field hash and, for a source-backed template, its original-file manifest hash.
 - **Submission:** one worker's completed answers, attachments, and signatures against one published template version. Submissions never replace the template or original.
 
@@ -26,6 +26,20 @@ model. Do not duplicate a Safety Program form into both models.
 
 The Templates screen can therefore list the existing program-bound templates
 across all Safety Programs. A third, parallel template model is not required.
+
+## Drive-original access review
+
+Drive archive candidates default to **Company access** only when they are
+reusable `internal` forms, program documents, training material, or references.
+That scope means any active authenticated member of the same company may list
+and download the item; it never means anonymous or public-internet access.
+
+A corporate administrator or safety manager can select **Safety/admin private**
+on an eligible item and update its review status. Confidential or restricted
+material, completed records, evidence, and unknown kinds are always forced
+private by both a normalization trigger and a table constraint. Users cannot
+update candidate rows directly; managers use the reviewed RPC, and each actual
+change creates an append-only, hash-chained review event.
 
 ## Private manual-upload workflow
 

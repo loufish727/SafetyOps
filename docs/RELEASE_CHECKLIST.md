@@ -28,7 +28,7 @@ the exact release revision and environment.
 
 ## Code and browser QA — LFES-REL-001, LFES-VER-001
 
-- [x] The current Playwright run passed 91, skipped 7, and failed 0 across
+- [x] The current Playwright run passed 93, skipped 7, and failed 0 across
   desktop and mobile projects.
 - [x] The seven conditional skips were reviewed: four require private fixture
   or original-PDF evidence, and three are desktop-only mirrors of mobile
@@ -52,6 +52,12 @@ the exact release revision and environment.
   employee workflow tables/RPCs, RLS, zero anonymous table grants, and the
   intended two anonymous capability-bound handoff RPC grants. Exact checksum
   identity for earlier applied legacy files is not asserted.
+- [x] Apply and record migration `017` with source SHA-256
+  `4a98c3c684e8ef7ac4e9bb78a6cd57385e1846e4e5a39c2eaedd32b2d8597516`.
+  Live checks confirm 112 company-access candidates, 11 safety/admin-private
+  candidates, zero invalid company scopes, RLS on candidates and review
+  events, authenticated select without direct update, scoped RPC grants, and
+  no anonymous grants.
 - [ ] Keep public Auth signup disabled; prove invitation, password setup,
   non-enumerating recovery, one-active-company, and last-admin controls.
 - [x] Verify anonymous signup is disabled; email confirmation is enabled; the
