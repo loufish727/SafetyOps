@@ -4,13 +4,13 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 293050,
-      "sha256": "c7d4d9ab69fb78b2b6f3265ad32ea0c31d75ff8d2815735285f346cdb5303234"
+      "bytes": 385875,
+      "sha256": "228f999f7921efdc5986a5cc2e42b9914e9fb81db774d67d952149a5b8a6219d"
     },
     {
       "path": "data.js",
-      "bytes": 603,
-      "sha256": "8eb4394040afe10d2604ab9196cfd6cf89a0876baac48ba03622579c5487bff4"
+      "bytes": 839,
+      "sha256": "6a953b5ca4216d67c429408e3012c10b72bc8ad7cf34986ca46f38817e20b8be"
     },
     {
       "path": "index.html",
@@ -44,8 +44,8 @@
     },
     {
       "path": "styles.css",
-      "bytes": 111327,
-      "sha256": "7f138127cae6c9588317eb27a05c86dd441f7dba5069acb74aa49a135be1c618"
+      "bytes": 130618,
+      "sha256": "238ea96e27bc31c33b8f453f98815afa678b1d37c2fa2be65b46e0b807af8c8a"
     },
     {
       "path": "supabase-config.js",
@@ -63,7 +63,7 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "aggregateSha256": "618f0e495d42a107e0589058e3760096aa4cec8139e6406bb4de8b5367ae1838",
+  "aggregateSha256": "8c49a4cdf9600363adc203a303df6842544bab1e13fc6dbc3a5cc9bc36e8b254",
   "releaseFiles": [
     {
       "path": ".github/workflows/deploy-pages.yml",
@@ -77,28 +77,33 @@
     },
     {
       "path": "app.js",
-      "bytes": 293050,
-      "sha256": "c7d4d9ab69fb78b2b6f3265ad32ea0c31d75ff8d2815735285f346cdb5303234"
+      "bytes": 385875,
+      "sha256": "228f999f7921efdc5986a5cc2e42b9914e9fb81db774d67d952149a5b8a6219d"
     },
     {
       "path": "data.js",
-      "bytes": 603,
-      "sha256": "8eb4394040afe10d2604ab9196cfd6cf89a0876baac48ba03622579c5487bff4"
+      "bytes": 839,
+      "sha256": "6a953b5ca4216d67c429408e3012c10b72bc8ad7cf34986ca46f38817e20b8be"
     },
     {
       "path": "deno.lock",
-      "bytes": 355,
-      "sha256": "eee41e0a5b613795fd50ea2b100355bc68fb82a84ef7cd59489a22aa65224c42"
+      "bytes": 370,
+      "sha256": "ee87ae5695e0d6a684ad6f2d02eb010ef964d5665db6f098f69b63a87b0461f9"
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 10173,
-      "sha256": "90c9a0e98319409605c6e3c9fe339e82d9bde4cfdf346a13b6c1244c391f80e7"
+      "bytes": 12094,
+      "sha256": "fa9aa33287fa73d3c32ce89ae15b4ef1338ca3ff28e1737e5fda0123c3874984"
     },
     {
       "path": "docs/competitive-research.md",
       "bytes": 24153,
       "sha256": "7abc41101ae4ce20398072d9543ba96b884fe0897a98f7cc2a55787c22dfba71"
+    },
+    {
+      "path": "docs/employee-safety-workflows.md",
+      "bytes": 5269,
+      "sha256": "3aeb5532055a90db058e1d113119d494e3dbbbf77901646bdc0193946a09ead6"
     },
     {
       "path": "docs/form-originals-and-templates.md",
@@ -122,28 +127,28 @@
     },
     {
       "path": "docs/KNOWN_RISKS.md",
-      "bytes": 6990,
-      "sha256": "811c8c079a3779800439c96eca38cb9edfb51be193906f7c5dd46ef51ba589a2"
+      "bytes": 8557,
+      "sha256": "eb6685ada0973052a4b77d7f43835e9f33ee561b403649f59ce465f6ca6fb62b"
     },
     {
       "path": "docs/LFES/CONTROL_MATRIX.md",
-      "bytes": 6062,
-      "sha256": "4af4d33684409e9913fc50d0aa6f291190b4321a85fab67c4bbc308662591126"
+      "bytes": 6001,
+      "sha256": "fd95d833f3f8443eaccfe2ac67f738046e9fa6b5cf6708752ebd26edc6470f36"
     },
     {
       "path": "docs/LFES/DECISIONS_AND_ASSUMPTIONS.md",
-      "bytes": 4728,
-      "sha256": "232010face12572c6bee893114446b0037dcb361d59a9d4eb7b4ac0225104b5f"
+      "bytes": 5787,
+      "sha256": "8edc5bfef273e0e0c66eceb79afea48419b4f7f1fd8c39931292ee152e1a2c90"
     },
     {
       "path": "docs/LFES/PROOF_MODEL.md",
-      "bytes": 3847,
-      "sha256": "cea25e7d61a14402447d46c09fcdfd1c375f5fa3944d7d98ab960ea362fa4050"
+      "bytes": 3918,
+      "sha256": "6b5f46546f3186cd46d365544d5d0438a83746e95e4e0ab66a1adf37711a86a7"
     },
     {
       "path": "docs/LFES/README.md",
-      "bytes": 3177,
-      "sha256": "2fd7f7375097763ddc5c63c27f7ff521226f2587c223ad51e73456eda049fb68"
+      "bytes": 3195,
+      "sha256": "242a9a884ed966f50fd9569b1b60b7d8497a367e5ff3a26f4bb2028d12444de3"
     },
     {
       "path": "docs/osha-corpus-manifest.json",
@@ -157,18 +162,18 @@
     },
     {
       "path": "docs/product-blueprint.md",
-      "bytes": 4603,
-      "sha256": "d2ec3923043f2f2fdd69347f43e72f58f3531ae8faf210d6c2f289083e9e8539"
+      "bytes": 5509,
+      "sha256": "0108666e5abb53f7f75109bfba50345a865953575112e22afc8f326d938033f6"
     },
     {
       "path": "docs/QA_LOG.md",
-      "bytes": 7616,
-      "sha256": "230ff9cb6187bae19fb800139679848e9d0fdcb5122fe8c353cf26c7b2a90f18"
+      "bytes": 7972,
+      "sha256": "4a1638021bcf25ffdbdf54fdeefe275c475f9008c0e3fb658a3a85693edaf6d8"
     },
     {
       "path": "docs/RELEASE_CHECKLIST.md",
-      "bytes": 8398,
-      "sha256": "5c2934880bc929e7b0599bd00214d53641e2677644e353e05b2bc805b782f580"
+      "bytes": 8848,
+      "sha256": "21867802880ee3f4e03b8dc29ccc7bbb04c7f1421f4c9d8126eb21b0cc54d86f"
     },
     {
       "path": "docs/safety-programs-schema.md",
@@ -212,8 +217,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 13502,
-      "sha256": "e947e40f85e20c2640c6e228c8ba16e19150c09f6639749651deeb0cfe621bd5"
+      "bytes": 16040,
+      "sha256": "9283992e10a18bc33c4f1d0df20816cad437614cc13a682ea72c0b01f6c2180d"
     },
     {
       "path": "safety-program-extracts.js",
@@ -252,8 +257,8 @@
     },
     {
       "path": "scripts/ingest-drive-zip-archive.mjs",
-      "bytes": 28061,
-      "sha256": "7fa5ca8b03ad5de73ff3d4b5a0f3303de47602a2380f20f9841e7b534da614de"
+      "bytes": 28820,
+      "sha256": "20fd1f823eb894194f48b0504504c47dccd4d5bff6d80bbc4b1d18fda78affdd"
     },
     {
       "path": "scripts/ingest-google-drive-safety-manifest.mjs",
@@ -272,8 +277,8 @@
     },
     {
       "path": "scripts/verify-public-build.mjs",
-      "bytes": 24093,
-      "sha256": "73b8ccf205d2dd4265e33c0d8992c5f959a42f742fda15982209e06302b8b738"
+      "bytes": 24890,
+      "sha256": "74e710b448bc65f66561a567684a957e3ab76442195514bab86138bd30c06a22"
     },
     {
       "path": "state-osha-reference.js",
@@ -282,8 +287,8 @@
     },
     {
       "path": "styles.css",
-      "bytes": 111327,
-      "sha256": "7f138127cae6c9588317eb27a05c86dd441f7dba5069acb74aa49a135be1c618"
+      "bytes": 130618,
+      "sha256": "238ea96e27bc31c33b8f453f98815afa678b1d37c2fa2be65b46e0b807af8c8a"
     },
     {
       "path": "supabase-config.example.js",
@@ -297,18 +302,23 @@
     },
     {
       "path": "supabase/config.toml",
-      "bytes": 949,
-      "sha256": "8b937ebe1e8ba08b9a1172592f6c04a58528058ca0ff95f8ddf482fb3b7a75a4"
+      "bytes": 1003,
+      "sha256": "c238ea1ff5b18b445437a955a8c18bb9fdcf6881c35f33d35b7acb2bfd9993bc"
     },
     {
       "path": "supabase/functions/drive-safety-ingest/index.ts",
-      "bytes": 37762,
-      "sha256": "f5596503270c20439cd02c3197bada4caca079cb1b523f3247ee360eec3792bf"
+      "bytes": 38680,
+      "sha256": "10e911425ba835714eca8249a52b76ae2df1ebaf09aeea011a689b1b83d13c3e"
+    },
+    {
+      "path": "supabase/functions/employee-document-file/index.ts",
+      "bytes": 27030,
+      "sha256": "c45c05808207971ea22a5529009ebf853b6ac6608e278c439dfc41cc8697e971"
     },
     {
       "path": "supabase/functions/sign-form-file/index.ts",
-      "bytes": 13126,
-      "sha256": "bfe5ec572deab7471377b988752104df09ad45600499e49be8016ce22e855f41"
+      "bytes": 13457,
+      "sha256": "e50e2ed5d2427a4a37ebd277f4bc749cbbe81cf0396674917f934467d6f44694"
     },
     {
       "path": "supabase/migrations/202607300001_initial_safetyops.sql",
@@ -372,23 +382,28 @@
     },
     {
       "path": "supabase/migrations/202607310013_drive_form_archive.sql",
-      "bytes": 72916,
-      "sha256": "9a214ba428c095776ce0b64c3de8fe179a76eba959655894f1deedbb757a123c"
+      "bytes": 74853,
+      "sha256": "389bb94776d92b0019c8c731396fc3ff958506383d7ad72d8e010c926f620f7c"
     },
     {
       "path": "supabase/migrations/202607310014_candidate_download_review_guard.sql",
-      "bytes": 4066,
-      "sha256": "3932b7d0b31bb4b79b07904f9b7afe96c31afb3b7beed9052169b52013505064"
+      "bytes": 4184,
+      "sha256": "e5824bdffec712583a9d2e03322ced26d31ffdd17fc5b348f56fa68f86714bb0"
     },
     {
       "path": "supabase/migrations/202607310015_drive_ingest_invalidation_ledger.sql",
-      "bytes": 6827,
-      "sha256": "e505445e3767c9210bb69225285a1bc3cfe235ece55a12526cf52de54783bcd6"
+      "bytes": 7007,
+      "sha256": "5b04a1deb124e8f73827a48c10f40d147630c9a2cc2179dc31a83aa36827902f"
+    },
+    {
+      "path": "supabase/migrations/202608030016_employee_safety_workflows.sql",
+      "bytes": 179958,
+      "sha256": "0255e88bdeb75a308d3987593cb015d0aa09a8e77f45db763470298749d91b8a"
     },
     {
       "path": "supabase/README.md",
-      "bytes": 13682,
-      "sha256": "af6d492223dc33cad872120d9b134f1a2f052631218c976025641bd05fed3ba7"
+      "bytes": 16590,
+      "sha256": "97944b4db739f9923224be62941bd21e9d698536a7b4cff6905c5d6186f37289"
     },
     {
       "path": "tenant-bootstrap.js",
@@ -407,8 +422,8 @@
     },
     {
       "path": "tests/helpers/authenticated-workspace.js",
-      "bytes": 32180,
-      "sha256": "181292c949911917b81c3b25fe53c93712ddcd41ee4213447fba274820362a19"
+      "bytes": 84024,
+      "sha256": "b4dd011e9482d580e8b23842a6953840d7d342d65030ff0d28557b0a0287e2df"
     },
     {
       "path": "tests/osha-reference.spec.js",
@@ -417,8 +432,13 @@
     },
     {
       "path": "tests/safety-programs.spec.js",
-      "bytes": 16704,
-      "sha256": "7c705225f2036c4ca72a0bbac88b04b270d22d3704d2bdaa9b5b481f63da93f0"
+      "bytes": 16792,
+      "sha256": "fa3e25bee5972737f98e0383052f83f578594dad5e0f166c765844d89c6dbb59"
+    },
+    {
+      "path": "tests/safety-workflows.spec.js",
+      "bytes": 22273,
+      "sha256": "6bb976e6d1f72ad98da970352eaefdb96896038775cc363809fd536ab4809b34"
     },
     {
       "path": "tests/smoke.spec.js",
@@ -431,5 +451,5 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "releaseAggregateSha256": "aa7025e39ba7307a5d4cd2620cb6a8eb1b273e17f62d909dd9faceebbb878138"
+  "releaseAggregateSha256": "3e4af74298e39489b01f084120d520421c4510404936b7306d8b649218d436a6"
 }

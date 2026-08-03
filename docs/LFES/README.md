@@ -35,21 +35,21 @@ security-definer RPC, Edge Function, or cross-company behavior.
 
 SafetyOps is a configured public application shell with static regulatory
 reference artifacts and a Supabase-backed implementation. The repository
-contains twelve ordered migrations and one Edge Function. Hosted migration
-history is aligned through `012`, and `010`–`012` compiled/applied in the final
-compatibility sequence; exact legacy applied-file checksums are not asserted.
-The latest full local
-Playwright run passed 67 tests, skipped 7 conditional/project instances, and
-failed 0. The public-release process uses an Ed25519-signed v2 manifest over the
+contains sixteen ordered migrations and three Edge Functions. Migration `016`
+passed a hosted rollback compile, was applied, and has a ledger entry bound to
+the reviewed source SHA-256; exact legacy applied-file checksums are not
+asserted. The employee-document function is active with JWT verification. The
+latest full local Playwright run passed 91 tests, skipped 7
+conditional/project instances, and failed 0. The public-release process uses
+an Ed25519-signed v2 manifest over the
 exact 12-file deployment artifact and exact sanitized release tree, verified
 in CI; only the attestation JSON/signature are omitted from tree hashing to
 avoid circular input.
 
-Those results prove hosted version-ledger alignment and final compatibility
-application, but do not prove historical applied-file identity or
-the PostgreSQL hostile-role matrix, Storage, the Edge Function, or complete
-tenant workflows. The Edge Function has not been shown deployed. Production
-tenant operation remains **BLOCKED** even when the
+Those results prove the named migration/catalog/function deployment evidence,
+but do not prove historical applied-file identity, the PostgreSQL hostile-role
+matrix, authorized Storage/scanner behavior, or complete tenant workflows.
+Production tenant operation remains **BLOCKED** even when the
 hosted public shell is a valid connection-required release. See:
 
 1. `../ARCHITECTURE.md`

@@ -4840,8 +4840,14 @@ a.citation-chip:hover {
 .runner-option input,
 .form-option input {
   position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
   opacity: 0;
-  pointer-events: none;
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .runner-option label,
@@ -5255,6 +5261,777 @@ a.citation-chip:hover {
   content: "✓";
 }
 
+/* Employee-centered committee, training, and document workflows */
+
+.committee-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 13px;
+}
+
+.meeting-card {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 190px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 17px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.meeting-card::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--meeting-accent, var(--accent));
+  content: "";
+}
+
+.meeting-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: 0 8px 22px rgba(16, 35, 31, 0.08);
+  transform: translateY(-1px);
+}
+
+.meeting-card[data-status="scheduled"],
+.meeting-card.scheduled {
+  --meeting-accent: var(--blue);
+}
+
+.meeting-card[data-status="attention"],
+.meeting-card[data-status="overdue"],
+.meeting-card.attention,
+.meeting-card.overdue {
+  --meeting-accent: var(--amber);
+}
+
+.meeting-card[data-status="closed"],
+.meeting-card.completed,
+.meeting-card.closed {
+  --meeting-accent: var(--accent);
+}
+
+.meeting-card h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.meeting-card > p {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.meeting-card .row-actions {
+  margin-top: auto;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+.meeting-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.meeting-meta > span,
+.meeting-meta > time {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+
+.meeting-meta > span + span::before,
+.meeting-meta > span + time::before,
+.meeting-meta > time + span::before {
+  width: 3px;
+  height: 3px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--line-strong);
+  content: "";
+}
+
+.workflow-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 10px;
+}
+
+.workflow-status-grid > * {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+
+.workflow-status-grid > * > span,
+.workflow-status-grid > * > small {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.workflow-status-grid > * > strong {
+  display: block;
+  margin: 5px 0 2px;
+  color: var(--ink);
+  font-family: "Manrope", "DM Sans", sans-serif;
+  font-size: 19px;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.workflow-status-grid > [data-status="due"],
+.workflow-status-grid > .due {
+  border-color: color-mix(in srgb, var(--amber) 34%, var(--line));
+  background: var(--amber-soft);
+}
+
+.workflow-status-grid > [data-status="overdue"],
+.workflow-status-grid > .overdue {
+  border-color: color-mix(in srgb, var(--red) 34%, var(--line));
+  background: var(--red-soft);
+}
+
+.workflow-status-grid > [data-status="complete"],
+.workflow-status-grid > .complete {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: var(--accent-soft);
+}
+
+.employee-record-backdrop {
+  position: fixed;
+  z-index: 98;
+  inset: 0;
+  background: rgba(7, 16, 14, 0.62);
+  animation: fadeIn 150ms ease;
+}
+
+.employee-record-drawer {
+  position: fixed;
+  z-index: 99;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: min(760px, calc(100vw - 24px));
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  animation: employeeRecordDrawerIn 180ms ease;
+}
+
+.employee-record-drawer > header,
+.employee-record-drawer > footer,
+.employee-record-drawer .employee-record-header,
+.employee-record-drawer .employee-record-footer {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.employee-record-drawer > footer,
+.employee-record-drawer .employee-record-footer {
+  align-items: center;
+  justify-content: flex-end;
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.employee-record-drawer > header h2,
+.employee-record-drawer .employee-record-header h2 {
+  margin: 4px 0;
+  font-size: 21px;
+  letter-spacing: -0.035em;
+}
+
+.employee-record-drawer > header p,
+.employee-record-drawer .employee-record-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.employee-record-drawer > .employee-record-body,
+.employee-record-drawer > main {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 18px 22px 26px;
+}
+
+.employee-record-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.employee-record-section {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.employee-record-section.full,
+.employee-record-section[data-span="full"] {
+  grid-column: 1 / -1;
+}
+
+.employee-record-section h3 {
+  margin-bottom: 5px;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+
+.employee-record-section > p {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.employee-document-list {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.employee-document-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.employee-document-row > div {
+  min-width: 0;
+}
+
+.employee-document-row strong,
+.employee-document-row span,
+.employee-document-row small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.employee-document-row strong {
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.employee-document-row span,
+.employee-document-row small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.retention-badge {
+  display: inline-flex;
+  min-height: 24px;
+  max-width: 100%;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.retention-badge.due,
+.retention-badge.warning,
+.retention-badge[data-status="due"] {
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.retention-badge.expired,
+.retention-badge[data-status="expired"] {
+  border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.retention-badge.hold,
+.retention-badge[data-status="hold"] {
+  border-color: color-mix(in srgb, var(--purple) 32%, var(--line));
+  background: var(--purple-soft);
+  color: var(--purple);
+}
+
+.scan-warning {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--amber) 34%, var(--line));
+  border-radius: 10px;
+  background: var(--amber-soft);
+  color: var(--muted-strong);
+  font-size: 9px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.scan-warning::before {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--amber) 14%, var(--surface));
+  color: var(--amber);
+  content: "!";
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.scan-warning strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.scan-warning.error,
+.scan-warning[data-status="failed"] {
+  border-color: color-mix(in srgb, var(--red) 34%, var(--line));
+  background: var(--red-soft);
+}
+
+.scan-warning.error::before,
+.scan-warning[data-status="failed"]::before {
+  background: color-mix(in srgb, var(--red) 14%, var(--surface));
+  color: var(--red);
+}
+
+.scan-warning.clear,
+.scan-warning[data-status="clear"] {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: var(--accent-soft);
+}
+
+.scan-warning.clear::before,
+.scan-warning[data-status="clear"]::before {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+  content: "\2713";
+}
+
+.row-actions {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.row-actions .button,
+.row-actions > button,
+.row-actions > a {
+  min-height: 31px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* Focused employee handoff mode intentionally covers the staff dashboard. */
+.signing-handoff {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  min-width: 320px;
+  place-items: center;
+  padding: clamp(14px, 3vw, 34px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background:
+    radial-gradient(circle at 80% 10%, rgba(78, 197, 160, 0.16), transparent 35%),
+    rgba(7, 16, 14, 0.94);
+  animation: fadeIn 150ms ease;
+}
+
+.signing-handoff-panel,
+.signing-handoff-shell,
+.signing-handoff > article,
+.signing-handoff > section {
+  width: min(920px, 100%);
+  min-width: 0;
+  max-height: calc(100dvh - clamp(28px, 6vw, 68px));
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.signing-handoff-panel > header,
+.signing-handoff-shell > header,
+.signing-handoff > article > header,
+.signing-handoff > section > header,
+.signing-handoff .signing-header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.signing-handoff-panel > header h2,
+.signing-handoff-shell > header h2,
+.signing-handoff > article > header h2,
+.signing-handoff > section > header h2,
+.signing-handoff .signing-header h2 {
+  margin: 3px 0 5px;
+  font-size: clamp(20px, 3vw, 28px);
+  letter-spacing: -0.04em;
+}
+
+.signing-handoff-panel > header p,
+.signing-handoff-shell > header p,
+.signing-handoff > article > header p,
+.signing-handoff > section > header p,
+.signing-handoff .signing-header p {
+  max-width: 660px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.signing-handoff-body {
+  display: grid;
+  min-width: 0;
+  gap: 15px;
+  padding: 19px 22px 24px;
+}
+
+.signing-handoff-panel > footer,
+.signing-handoff-shell > footer,
+.signing-handoff > article > footer,
+.signing-handoff > section > footer,
+.signing-handoff .signing-footer {
+  position: sticky;
+  z-index: 2;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.signing-document-summary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.6fr);
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.signing-document-summary > * {
+  min-width: 0;
+}
+
+.signing-document-summary strong,
+.signing-document-summary span,
+.signing-document-summary small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.signing-document-summary strong {
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.signing-document-summary span,
+.signing-document-summary small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.signing-consent {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
+  border-radius: 12px;
+  background: var(--blue-soft);
+  color: var(--muted-strong);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.signing-consent label {
+  display: grid;
+  min-height: 44px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.signing-consent input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.handoff-standalone {
+  min-height: 100dvh;
+}
+
+.handoff-standalone:not(.signing-handoff) {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 80% 10%, rgba(78, 197, 160, 0.16), transparent 35%),
+    var(--surface-soft);
+}
+
+.handoff-standalone > .auth-card,
+.handoff-complete-card {
+  width: min(680px, 100%);
+  padding: clamp(22px, 5vw, 44px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.handoff-complete-card {
+  display: grid;
+  gap: 14px;
+}
+
+.handoff-complete-card .success-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.handoff-complete-card dl,
+.employee-form-handoff-shell dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.handoff-complete-card dl > div,
+.employee-form-handoff-shell dl > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(100px, 0.3fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.handoff-complete-card dt,
+.employee-form-handoff-shell dt {
+  color: var(--muted);
+}
+
+.handoff-complete-card dd,
+.employee-form-handoff-shell dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.employee-form-handoff-shell .signing-document-summary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.employee-form-handoff-shell {
+  max-height: none;
+  overflow: visible;
+}
+
+.employee-form-handoff-shell > header {
+  position: static;
+}
+
+.employee-form-handoff-shell .handoff-response-section {
+  min-width: 0;
+}
+
+.employee-form-handoff-shell .signing-handoff-body > footer {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -22px -24px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.handoff-pinned-value {
+  min-height: 42px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted-strong);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.signing-evidence {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--line);
+}
+
+.signing-evidence > * {
+  min-width: 0;
+  padding: 11px 12px;
+  background: var(--surface-soft);
+}
+
+.signing-evidence dt,
+.signing-evidence span,
+.signing-evidence small {
+  display: block;
+  margin: 0 0 3px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.signing-evidence dd,
+.signing-evidence strong,
+.signing-evidence code {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.employee-record-drawer img,
+.employee-record-drawer iframe,
+.employee-record-drawer embed,
+.signing-handoff img,
+.signing-handoff iframe,
+.signing-handoff embed,
+.signing-handoff canvas {
+  max-width: 100%;
+}
+
+.signing-handoff iframe,
+.signing-handoff embed,
+.signing-handoff canvas {
+  width: 100%;
+}
+
+@keyframes employeeRecordDrawerIn {
+  from { transform: translateX(28px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes employeeRecordSheetIn {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -5345,6 +6122,21 @@ a.citation-chip:hover {
 }
 
 @media (max-width: 920px) {
+  .employee-record-drawer {
+    width: min(720px, calc(100vw - 16px));
+  }
+
+  .signing-handoff {
+    place-items: stretch;
+  }
+
+  .signing-handoff-panel,
+  .signing-handoff-shell,
+  .signing-handoff > article,
+  .signing-handoff > section {
+    justify-self: center;
+  }
+
   .auth-shell {
     grid-template-columns: 1fr;
   }
@@ -5526,6 +6318,116 @@ a.citation-chip:hover {
 }
 
 @media (max-width: 700px) {
+  .committee-grid,
+  .employee-record-grid,
+  .signing-document-summary,
+  .signing-evidence {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .meeting-card {
+    min-height: 0;
+  }
+
+  .meeting-meta > span + span::before,
+  .meeting-meta > span + time::before,
+  .meeting-meta > time + span::before {
+    display: none;
+  }
+
+  .employee-record-drawer {
+    top: auto;
+    width: 100%;
+    height: auto;
+    max-height: 94dvh;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    border-radius: 18px 18px 0 0;
+    animation: employeeRecordSheetIn 180ms ease;
+  }
+
+  .employee-record-drawer > header,
+  .employee-record-drawer > footer,
+  .employee-record-drawer .employee-record-header,
+  .employee-record-drawer .employee-record-footer,
+  .employee-record-drawer > .employee-record-body,
+  .employee-record-drawer > main {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .employee-record-section.full,
+  .employee-record-section[data-span="full"] {
+    grid-column: auto;
+  }
+
+  .employee-document-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .employee-document-row .row-actions,
+  .meeting-card .row-actions,
+  .row-actions {
+    justify-content: flex-start;
+  }
+
+  .employee-document-row .row-actions .button,
+  .employee-document-row .row-actions > button,
+  .employee-document-row .row-actions > a {
+    flex: 1 1 auto;
+  }
+
+  .signing-handoff {
+    display: block;
+    padding: 0;
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .signing-handoff-panel,
+  .signing-handoff-shell,
+  .signing-handoff > article,
+  .signing-handoff > section {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .signing-handoff-panel > header,
+  .signing-handoff-shell > header,
+  .signing-handoff > article > header,
+  .signing-handoff > section > header,
+  .signing-handoff .signing-header,
+  .signing-handoff-body,
+  .signing-handoff-panel > footer,
+  .signing-handoff-shell > footer,
+  .signing-handoff > article > footer,
+  .signing-handoff > section > footer,
+  .signing-handoff .signing-footer {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .signing-handoff-panel > footer,
+  .signing-handoff-shell > footer,
+  .signing-handoff > article > footer,
+  .signing-handoff > section > footer,
+  .signing-handoff .signing-footer {
+    align-items: stretch;
+  }
+
+  .signing-handoff-panel > footer .button,
+  .signing-handoff-shell > footer .button,
+  .signing-handoff > article > footer .button,
+  .signing-handoff > section > footer .button,
+  .signing-handoff .signing-footer .button {
+    min-height: 48px;
+    flex: 1 1 145px;
+  }
+
   .auth-feature-list {
     grid-template-columns: 1fr;
   }
