@@ -28,7 +28,7 @@ the exact release revision and environment.
 
 ## Code and browser QA — LFES-REL-001, LFES-VER-001
 
-- [x] The current Playwright run passed 93, skipped 7, and failed 0 across
+- [x] The current Playwright run passed 95, skipped 7, and failed 0 across
   desktop and mobile projects.
 - [x] The seven conditional skips were reviewed: four require private fixture
   or original-PDF evidence, and three are desktop-only mirrors of mobile
@@ -58,6 +58,14 @@ the exact release revision and environment.
   candidates, zero invalid company scopes, RLS on candidates and review
   events, authenticated select without direct update, scoped RPC grants, and
   no anonymous grants.
+- [x] Apply and record migration `018` with source SHA-256
+  `173b97ac95fe8ff0548ac39e7e5f548d03eb53801d7380cf2ce4020e4db82aee`.
+  Live checks confirm all 123 candidates have immutable sanitized collection
+  labels (120 Forms & Appendices, 3 Spanish Translations), both candidate
+  guards are enabled, authenticated access remains read-only, and the
+  derivation function has no anonymous or authenticated execution grant.
+- [x] Deploy the hardened `drive-safety-ingest` function and confirm version 2
+  is active with its existing server-authenticated, no-platform-JWT boundary.
 - [ ] Keep public Auth signup disabled; prove invitation, password setup,
   non-enumerating recovery, one-active-company, and last-admin controls.
 - [x] Verify anonymous signup is disabled; email confirmation is enabled; the
