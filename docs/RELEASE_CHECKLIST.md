@@ -28,7 +28,7 @@ the exact release revision and environment.
 
 ## Code and browser QA — LFES-REL-001, LFES-VER-001
 
-- [x] The current Playwright run passed 67, skipped 7, and failed 0 across
+- [x] The current Playwright run passed 91, skipped 7, and failed 0 across
   desktop and mobile projects.
 - [x] The seven conditional skips were reviewed: four require private fixture
   or original-PDF evidence, and three are desktop-only mirrors of mobile
@@ -47,9 +47,11 @@ the exact release revision and environment.
 ## Supabase staging — LFES-SEC-001, LFES-DB-002, LFES-DB-006
 
 - [x] Create a dedicated non-production SafetyOps project.
-- [x] Align hosted migration history through `012` with no pending version and
-  retain output. Migration `012` records the pgcrypto compatibility repair;
-  exact checksum identity for previously applied legacy files is not asserted.
+- [x] Apply and record migration `016` with its reviewed source SHA-256 after a
+  successful hosted rollback compile. Live catalog checks confirm the new
+  employee workflow tables/RPCs, RLS, zero anonymous table grants, and the
+  intended two anonymous capability-bound handoff RPC grants. Exact checksum
+  identity for earlier applied legacy files is not asserted.
 - [ ] Keep public Auth signup disabled; prove invitation, password setup,
   non-enumerating recovery, one-active-company, and last-admin controls.
 - [x] Verify anonymous signup is disabled; email confirmation is enabled; the
@@ -90,10 +92,14 @@ the exact release revision and environment.
 
 ## Private files — LFES-SEC-002, LFES-OBS-001
 
-- [ ] Deploy and test `sign-form-file` with JWT verification, explicit allowed
-  origins, private buckets, and server-only service-role secrets.
-- [ ] Build and deploy the prepare/quarantine/malware-scan/commit upload
-  pipeline; no such live pipeline exists today.
+- [x] Deploy `sign-form-file` and `employee-document-file` with JWT verification;
+  the hosted function inventory reports both active and `verify_jwt=true`.
+- [x] Build and deploy the employee-PDF prepare/quarantine/hash/lease/commit
+  path. It fails closed as `upload_pending` while no trusted malware scanner is
+  configured, and cannot be used as a form-original ingestion service.
+- [ ] Configure and approve the trusted HTTPS malware scanner and exercise its
+  clean, rejected, timeout, stale-lease, retry, exact-hash-attestation, and
+  recovery paths with non-production PDFs.
 - [ ] Verify MIME, extension, size, clean-scan, SHA-256, and metadata checks.
 - [ ] Prove allowed download produces one short-lived URL and forbidden
   company/location or unverified-byte requests disclose no object existence.

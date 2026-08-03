@@ -4,7 +4,7 @@ SafetyOps is a multi-tenant application foundation for workplace safety operatio
 
 The public application starts empty. It does not ship a fictional company, locations, workers, incidents, inspections, training records, documents, or tenant control mappings. GitHub Pages hosts the application shell and public regulatory reference metadata; authorized company records and private files belong in Supabase.
 
-The browser implementation, twelve ordered migrations, and one controlled-download Edge Function exist in source. The dedicated hosted SafetyOps project has aligned migration-ledger history through `012`; migrations `010` through `012` compiled and applied in the final compatibility sequence on 2026-07-31. Migration `012` reconciles the hosted pgcrypto function paths created by earlier versions. Supabase migration history does not prove checksum identity for previously applied files, and the hosted role matrix, Storage, Edge Function, upload pipeline, and regulatory review still require separate proof before broad production use.
+The browser implementation, sixteen ordered migrations, and three Edge Functions exist in source. On 2026-08-03, migration `016` passed rollback compilation, was applied to the dedicated hosted SafetyOps project, and was recorded in its migration ledger with the reviewed source SHA-256. The live catalog exposes the employee workflow tables/RPCs with RLS, zero anonymous table grants, and only the two capability-bound handoff RPCs executable by `anon`. The employee-document function is active with JWT verification. Earlier migrations `013` through `015` remain recorded under their original deployment timestamps, so the ledger still does not prove checksum identity for previously applied files. The full authenticated role matrix, configured malware scanner, Storage recovery, regulatory review, and production operations still require separate proof before broad production use.
 
 ## Current source implementation
 
@@ -15,6 +15,9 @@ The browser implementation, twelve ordered migrations, and one controlled-downlo
 - Safety-program and source-derived digital-form data models
 - Form drafts, typed answers, electronic signatures, and pinned source/schema lineage
 - Inspection, incident, training-assignment, corrective-action, and document-acknowledgement workflows
+- Employee directory, safety-committee minutes, action ownership, training completion/retention, and employee-bound document records
+- Facilitated employee forms: the safety user assigns a published form, starts a 15-minute one-time tablet handoff, and sees pending/completed status without requiring the employee to have an account
+- Append-only employee form submissions with pinned employee/location/facilitator/schema evidence and an immutable SHA-256 manifest; consumed handoffs cannot be replayed
 - Controlled form-original downloads through short-lived, one-object signed URLs
 - Full structural eCFR index for 29 CFR Chapter XVII, current through 2026-07-29
 - Curated high-use Oregon OSHA, Washington DOSH, and Cal/OSHA starter references
@@ -24,10 +27,28 @@ The browser implementation, twelve ordered migrations, and one controlled-downlo
 - Service-only invite-owner bootstrap, retirement of both browser self-onboarding RPCs, single-active-company membership, attributable membership audit, last-administrator protection, state-aware location creation, database-derived jurisdiction review, and resolved-jurisdiction program gating in migration `011`
 - Row Level Security, immutable version records, append-only audit records, and private Storage design
 - Bounded browser queries, with explicit server pagination still required before large-scale use
-- Responsive desktop/mobile interface; the latest full local Playwright run completed with 67 passed, 7 conditional/project skips, and 0 failures
+- Responsive desktop/mobile interface; the latest full local Playwright run completed with 91 passed, 7 conditional/project skips, and 0 failures
 - GitHub Pages build and deployment workflow
 
-Some administrative workflows remain intentionally unavailable until their server-side services are deployed. In particular, SafetyOps does **not** yet provide a production form-original upload service. The checked-in `sign-form-file` Edge Function authorizes downloads of already committed, verified files; it is not an upload, quarantine, malware-scan, or commit service. Development-only local upload staging is disabled by default and is never the production system of record.
+Some administrative workflows remain intentionally unavailable until their server-side services are deployed. In particular, SafetyOps does **not** yet provide a production form-original upload service. The checked-in `sign-form-file` Edge Function authorizes downloads of already committed, verified form originals; it is not an upload, quarantine, malware-scan, or commit service. The separate employee-PDF service provides short-lived upload sessions, exact-size/SHA-256 verification, recoverable processing leases, quarantine, and a service-only scan attestation bound to the stored hash. It releases a PDF only when a configured trusted scanner reports those exact bytes `clean`; with no scanner configured, the document remains non-releasable with malware status `unavailable`. Development-only local upload staging is disabled by default and is never the production system of record.
+
+## Employee tablet and document workflow
+
+Employees are company records, not required Auth users. An authenticated safety
+user assigns a published, location-applicable form and starts a 15-minute
+one-time handoff in an isolated tab. Only the token digest is stored; the raw
+token is never persisted. The employee completes and signs the pinned form on
+the handed-over device, submission consumes the ceremony, and the safety
+dashboard changes the assignment from pending to completed. File-upload fields
+are not supported in this tablet workflow.
+
+Uploaded employee PDFs follow a separate boundary and remain quarantined and
+unavailable for signing/download until a configured trusted malware scanner
+attests the exact stored SHA-256 as `clean`.
+Location-specific regulatory citations remain `review_required` trace inputs
+until their exact jurisdiction and source lineage are reviewed. See
+`docs/employee-safety-workflows.md` for the workflow, evidence boundary, and
+production follow-ups.
 
 ## LFES location and jurisdiction model
 
@@ -88,15 +109,21 @@ npm run sync:osha
 
 Use a separate Supabase project for SafetyOps:
 
-1. Apply every SQL file in `supabase/migrations/` in filename order, currently `202607300001` through `202607310012`. The dedicated hosted project has migration-ledger parity through `012`, final compatibility application evidence for `010` through `012`, and no pending version. This is not a checksum assertion for earlier applied files; database behavior still requires the hosted catalog, role, and workflow tests listed in the release checklist.
+1. Apply every SQL file in `supabase/migrations/` in filename order, currently `202607300001` through `202608030016`. The last recorded hosted evidence in this document proves migration-ledger parity only through `012`; migrations `013` through `016` need their own application record. This is not a checksum assertion for earlier applied files; database behavior still requires the hosted catalog, role, and workflow tests listed in the release checklist.
 2. Deploy the controlled-download function:
 
    ```bash
    npx supabase functions deploy sign-form-file --project-ref <project-ref>
+   npx supabase functions deploy employee-document-file --project-ref <project-ref>
    npx supabase secrets set \
      SAFETYOPS_ALLOWED_ORIGINS=https://<production-origin> \
      --project-ref <project-ref>
    ```
+
+   Employee PDFs remain quarantined unless a reviewed HTTPS malware scanner is
+   configured with server-only `SAFETYOPS_PDF_SCANNER_URL` and
+   `SAFETYOPS_PDF_SCANNER_TOKEN` secrets. Never put either value in the browser
+   or GitHub Pages configuration.
 
 3. Confirm the function receives the Supabase URL, anon key, and service-role key as server-side function secrets. Never copy the service-role key into browser code or GitHub Pages configuration.
 4. Add only the project URL and publishable/anon key to `supabase-config.js`.
@@ -130,6 +157,7 @@ The eCFR is continuously updated and is not the official legal edition of the CF
 
 - `docs/competitive-research.md`
 - `docs/form-originals-and-templates.md`
+- `docs/employee-safety-workflows.md`
 - `docs/google-drive-safety-program-ingestion.md`
 - `docs/safety-programs-schema.md`
 - `docs/osha-reference-architecture.md`

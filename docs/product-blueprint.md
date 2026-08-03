@@ -6,7 +6,7 @@ SafetyOps gives a company one reliable safety record across all locations withou
 
 ## Primary users
 
-- **Worker:** completes assigned inspections and training, reports hazards/incidents, reads documents, and manages credentials.
+- **Worker/employee:** completes assigned forms and training on a facilitated tablet, reports hazards/incidents, and signs or acknowledges approved documents. The initial employee model does not require an individual SafetyOps login.
 - **Supervisor:** reviews shift/site work, assigns corrective actions, verifies practical training, and monitors local readiness.
 - **Location manager:** owns local compliance, investigations, overdue work, and worker readiness.
 - **Safety manager:** standardizes company programs, templates, training, documents, and reporting across locations.
@@ -64,6 +64,19 @@ Course version
 → Expiry or refresher assignment
 ```
 
+### Facilitated employee-form loop
+
+```text
+Published location-applicable form version
+→ Safety user assigns employee
+→ Dashboard shows pending
+→ Safety user starts isolated 15-minute tablet handoff
+→ Employee answers, consents, attests, and types their name
+→ Append-only manifest and SHA-256 evidence
+→ Handoff consumed and replay blocked
+→ Dashboard shows completed
+```
+
 ### Incident loop
 
 ```text
@@ -113,6 +126,10 @@ Official source snapshot and SHA-256
 - Use browser storage only for non-authoritative UI preferences such as theme and selected location.
 - Use private Supabase Storage with signed access for evidence and controlled files.
 - Never expose service-role credentials in GitHub Pages.
+- Keep employees independent from Auth accounts and isolate each employee
+  handoff from the facilitator's authenticated session.
+- Treat typed citations as `review_required` trace inputs until a qualified,
+  location-specific source review pins their lineage.
 
 ## Prototype success criteria
 
@@ -128,6 +145,8 @@ The prototype succeeds when a stakeholder can:
 8. Search the full OSHA reference corpus and see the selected location's state-plan context.
 9. Open a citation from an inspection, course, document, or action and follow its source trace.
 10. Understand how Supabase will enforce company, role, location, file, and regulatory-catalogue access.
+11. Assign an employee form, hand over a tablet without creating an employee
+    login, and see pending change to completed after one-time submission.
 
 ## Deliberately deferred
 

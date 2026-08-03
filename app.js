@@ -31,6 +31,8 @@
   const uiStoragePrefix = "safetyops.ui.";
   const authHashParameters = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const authQueryParameters = new URLSearchParams(window.location.search);
+  const employeeHandoffToken = authHashParameters.get("handoff") || "";
+  const isEmployeeHandoffMode = /^[0-9a-f]{64}$/.test(employeeHandoffToken);
   const authQueryFlowHint = ["invite", "recovery"].includes(authQueryParameters.get("auth"))
     ? authQueryParameters.get("auth")
     : null;
@@ -89,16 +91,24 @@
     formArchiveError: "",
     localFormUploads: [],
     programDrawerId: null,
+    employeeDrawerId: null,
     originalPreviewId: null,
     activeFormId: null,
     modal: null,
+    modalContext: {},
     selectedTemplateId: null,
     authStatus: "configuration-required",
     authMode: "sign-in",
     authFlow: null,
     authUser: null,
     authMessage: "",
-    authBusy: false
+    authBusy: false,
+    employeeHandoff: {
+      status: isEmployeeHandoffMode ? "loading" : "inactive",
+      data: null,
+      error: "",
+      receipt: null
+    }
   };
 
   const formUploadDbName = "safetyops-private-form-uploads";
@@ -147,9 +157,9 @@
         window.SAFETYOPS_SUPABASE_ANON_KEY,
         {
           auth: {
-            persistSession: window.SAFETYOPS_ENABLE_PERSISTENT_AUTH_SESSION === true,
-            autoRefreshToken: true,
-            detectSessionInUrl: true
+            persistSession: !isEmployeeHandoffMode && window.SAFETYOPS_ENABLE_PERSISTENT_AUTH_SESSION === true,
+            autoRefreshToken: !isEmployeeHandoffMode,
+            detectSessionInUrl: !isEmployeeHandoffMode
           }
         }
       );
@@ -173,6 +183,7 @@
       label: "Safety operations",
       items: [
         { id: "inspections", label: "Forms & inspections", icon: "F" },
+        { id: "committee", label: "Safety committee", icon: "C" },
         { id: "training", label: "Training", icon: "T" },
         { id: "incidents", label: "Incidents", icon: "!", danger: true },
         { id: "actions", label: "Corrective actions", icon: "A" }
@@ -211,6 +222,11 @@
       eyebrow: "Field assurance",
       title: "Forms & inspections",
       description: "Schedule repeatable work, capture evidence in the field, and turn findings into accountable actions."
+    },
+    committee: {
+      eyebrow: "Worker participation",
+      title: "Safety committee",
+      description: "Record meeting notes, attendance, decisions, and accountable follow-up work in one traceable record."
     },
     training: {
       eyebrow: "Worker readiness",
@@ -891,6 +907,14 @@
       "inspections",
       "courses",
       "people",
+      "trainingAssignments",
+      "trainingRequirements",
+      "trainingCompletions",
+      "committeeMeetings",
+      "employeeDocuments",
+      "employeeSignatures",
+      "employeeFormAssignments",
+      "employeeFormSubmissions",
       "incidents",
       "actions",
       "documents",
@@ -946,8 +970,10 @@
     state.searchQuery = "";
     state.programQuery = "";
     state.modal = null;
+    state.modalContext = {};
     state.referenceId = null;
     state.programDrawerId = null;
+    state.employeeDrawerId = null;
     state.originalPreviewId = null;
     state.activeFormId = null;
     state.selectedTemplateId = null;
@@ -994,10 +1020,18 @@
         inspectionContextsResult,
         coursesResult,
         trainingAssignmentsResult,
+        trainingRequirementsResult,
+        trainingCompletionsResult,
         incidentsResult,
         actionsResult,
+        committeeMeetingsResult,
+        employeesResult,
         documentsResult,
         documentAcknowledgementsResult,
+        employeeDocumentsResult,
+        employeeSignaturesResult,
+        employeeFormAssignmentsResult,
+        employeeFormSubmissionsResult,
         membersResult,
         certificationsResult,
         auditResult,
@@ -1057,17 +1091,30 @@
           .limit(100),
         supabaseClient
           .from("training_courses")
-          .select("id, title, category, description, estimated_minutes, active, current_version, created_at, updated_at, training_course_versions(id, version, published)")
+          .select("id, title, category, description, estimated_minutes, active, current_version, validity_months, default_retention_months, retention_basis, created_at, updated_at, training_course_versions(id, version, published)")
           .eq("company_id", membership.company_id)
           .eq("active", true)
           .order("updated_at", { ascending: false })
           .limit(500),
         supabaseClient
           .from("training_assignments")
-          .select("id, location_id, course_id, course_version, worker_profile_id, status, assigned_at, due_at, completed_at, quiz_score")
+          .select("id, location_id, course_id, course_version, employee_id, worker_profile_id, requirement_id, status, assigned_at, due_at, completed_at, quiz_score, valid_until, retain_until, retention_status")
           .eq("company_id", membership.company_id)
           .order("assigned_at", { ascending: false })
-          .limit(250),
+          .limit(1000),
+        supabaseClient
+          .from("training_requirements")
+          .select("id, location_id, employee_id, course_id, requirement_reason, cadence_months, retention_months, retention_basis, regulatory_basis, active, created_at, updated_at")
+          .eq("company_id", membership.company_id)
+          .eq("active", true)
+          .order("updated_at", { ascending: false })
+          .limit(1000),
+        supabaseClient
+          .from("training_completions")
+          .select("id, location_id, assignment_id, employee_id, course_id, course_version, requirement_id, completed_at, valid_until, retain_until, retention_status, completion_method, quiz_score, instructor_name, verified_by, completion_sha256, created_at")
+          .eq("company_id", membership.company_id)
+          .order("completed_at", { ascending: false })
+          .limit(2000),
         supabaseClient
           .from("incidents")
           .select("id, location_id, incident_number, title, incident_type, potential_severity, status, occurred_at, reported_by, created_at")
@@ -1076,10 +1123,22 @@
           .limit(100),
         supabaseClient
           .from("corrective_actions")
-          .select("id, location_id, source_type, source_id, title, priority, status, assigned_to, due_at, created_at")
+          .select("id, location_id, source_type, source_id, committee_meeting_id, title, description, priority, status, assigned_employee_id, assigned_to, due_at, required_evidence, closeout_note, created_at")
           .eq("company_id", membership.company_id)
           .order("created_at", { ascending: false })
           .limit(150),
+        supabaseClient
+          .from("safety_committee_meetings")
+          .select("id, location_id, scope, title, meeting_date, status, chair_employee_id, agenda, notes, decisions, next_meeting_at, prepared_by, finalized_by, finalized_at, minutes_sha256, created_at, updated_at, safety_committee_attendees(id, employee_id, committee_role, attendance_status, attendance_method)")
+          .eq("company_id", membership.company_id)
+          .order("meeting_date", { ascending: false })
+          .limit(500),
+        supabaseClient
+          .from("employees")
+          .select("id, user_id, employee_number, full_name, work_email, job_title, department, employment_status, hired_on, separated_on, primary_location_id, created_at, updated_at, employee_location_assignments(id, location_id, is_primary)")
+          .eq("company_id", membership.company_id)
+          .order("full_name", { ascending: true })
+          .limit(2000),
         supabaseClient
           .from("documents")
           .select("id, title, document_type, owner_profile_id, current_version, acknowledgement_required, effective_at, review_at, active, updated_at, document_versions(id, version, published, checksum_sha256, published_at)")
@@ -1093,6 +1152,30 @@
           .eq("company_id", membership.company_id)
           .eq("user_id", user.id)
           .limit(1000),
+        supabaseClient
+          .from("employee_documents")
+          .select("id, company_id, location_id, employee_id, document_kind, title, document_date, status, original_filename, mime_type, size_bytes, document_sha256, validation_status, malware_scan_status, signature_intent, consent_version, signature_due_at, retention_basis, retain_until, legal_hold, employee_can_view, manager_visibility, audit_visible, uploaded_by, created_by, signed_at, created_at, updated_at")
+          .eq("company_id", membership.company_id)
+          .order("created_at", { ascending: false })
+          .limit(2000),
+        supabaseClient
+          .from("employee_document_signatures")
+          .select("id, employee_document_id, employee_id, authenticated_actor_user_id, facilitator_user_id, signer_name_snapshot, authenticated_actor_role_snapshot, signature_method, identity_verification_method, facilitator_attestation, signature_intent, consent_version, typed_name_confirmation, signed_source_sha256, signature_sha256, signed_at")
+          .eq("company_id", membership.company_id)
+          .order("signed_at", { ascending: false })
+          .limit(2000),
+        supabaseClient
+          .from("employee_form_assignments")
+          .select("id, company_id, location_id, employee_id, program_version_id, form_template_version_id, title, instructions, status, due_at, assigned_by, assigned_at, started_at, completed_at, created_at, updated_at")
+          .eq("company_id", membership.company_id)
+          .order("assigned_at", { ascending: false })
+          .limit(2000),
+        supabaseClient
+          .from("employee_form_submissions")
+          .select("id, company_id, location_id, assignment_id, employee_id, program_version_id, form_template_version_id, facilitator_user_id, employee_name_snapshot, facilitator_name_snapshot, facilitator_role_snapshot, identity_verification_method, form_schema_sha256, signature_intent, consent_version, typed_name_confirmation, employee_attestation, was_overdue, submitted_at, submission_sha256, created_at")
+          .eq("company_id", membership.company_id)
+          .order("submitted_at", { ascending: false })
+          .limit(2000),
         supabaseClient
           .from("company_memberships")
           .select("user_id, role, active, profiles(full_name), location_memberships(location_id)")
@@ -1189,10 +1272,18 @@
         inspectionContextsResult,
         coursesResult,
         trainingAssignmentsResult,
+        trainingRequirementsResult,
+        trainingCompletionsResult,
         incidentsResult,
         actionsResult,
+        committeeMeetingsResult,
+        employeesResult,
         documentsResult,
         documentAcknowledgementsResult,
+        employeeDocumentsResult,
+        employeeSignaturesResult,
+        employeeFormAssignmentsResult,
+        employeeFormSubmissionsResult,
         membersResult,
         certificationsResult,
         auditResult,
@@ -1223,15 +1314,15 @@
       resetTenantOperationalData();
       const rawMembers = membersResult.data || [];
       const rawRole = membership.role || "worker";
-      const visibleMembers = ["corporate_admin", "safety_manager"].includes(rawRole)
-        ? rawMembers
-        : ["location_manager", "supervisor"].includes(rawRole)
-          ? rawMembers.filter((member) => (
-            member.user_id === user.id
-            || (member.location_memberships || []).length > 0
-          ))
-          : rawMembers.filter((member) => member.user_id === user.id);
       const rawAssignments = trainingAssignmentsResult.data || [];
+      const rawTrainingRequirements = trainingRequirementsResult.data || [];
+      const rawTrainingCompletions = trainingCompletionsResult.data || [];
+      const rawEmployees = employeesResult.data || [];
+      const rawCommitteeMeetings = committeeMeetingsResult.data || [];
+      const rawEmployeeDocuments = employeeDocumentsResult.data || [];
+      const rawEmployeeSignatures = employeeSignaturesResult.data || [];
+      const rawEmployeeFormAssignments = employeeFormAssignmentsResult.data || [];
+      const rawEmployeeFormSubmissions = employeeFormSubmissionsResult.data || [];
       const rawCertifications = certificationsResult.data || [];
       const rawPrograms = programsResult.data || [];
       const rawProgramVersions = programVersionsResult.data || [];
@@ -1253,6 +1344,10 @@
         member.user_id,
         member.profiles?.full_name?.trim() || "Team member"
       ]));
+      const memberRoleById = new Map(rawMembers.map((member) => [
+        member.user_id,
+        member.role
+      ]));
       memberNameById.set(user.id, fullName);
 
       data.company = {
@@ -1261,7 +1356,7 @@
         slug: companyResult.data.slug,
         timezone: companyResult.data.timezone,
         plan: "Private Supabase workspace",
-        activeWorkers: rawMembers.length,
+        activeWorkers: rawEmployees.filter((employee) => employee.employment_status === "active").length,
         daysWithoutRecordable: null
       };
       data.currentUser = {
@@ -1272,16 +1367,22 @@
         rawRole
       };
 
-      data.people = visibleMembers.map((member) => {
-        const name = memberNameById.get(member.user_id);
+      data.people = rawEmployees.map((employee) => {
+        const name = employee.full_name?.trim() || "Employee record";
         const workerAssignments = rawAssignments.filter((assignment) =>
-          assignment.worker_profile_id === member.user_id
+          assignment.employee_id === employee.id
         );
         const completeAssignments = workerAssignments.filter((assignment) =>
           ["complete", "completed"].includes(assignment.status)
         ).length;
         const workerCertifications = rawCertifications.filter((certification) =>
-          certification.worker_profile_id === member.user_id
+          employee.user_id && certification.worker_profile_id === employee.user_id
+        );
+        const workerDocuments = rawEmployeeDocuments.filter((documentRecord) =>
+          documentRecord.employee_id === employee.id
+        );
+        const workerEmployeeForms = rawEmployeeFormAssignments.filter((assignment) =>
+          assignment.employee_id === employee.id
         );
         const now = Date.now();
         const hasExpired = workerCertifications.some((certification) =>
@@ -1297,21 +1398,51 @@
           !["complete", "completed", "waived"].includes(assignment.status)
         );
         const locationIds = [...new Set(
-          (member.location_memberships || []).map((item) => item.location_id).filter(Boolean)
+          (employee.employee_location_assignments || [])
+            .map((item) => item.location_id)
+            .filter(Boolean)
         )];
-        const primaryLocationId = locationIds[0] || null;
+        const primaryLocationId = employee.primary_location_id || locationIds[0] || null;
+        const linkedRole = employee.user_id ? memberRoleById.get(employee.user_id) : null;
+        const pendingDocuments = workerDocuments.filter((documentRecord) =>
+          documentRecord.status === "awaiting_signature"
+        ).length;
+        const pendingEmployeeForms = workerEmployeeForms.filter((assignment) =>
+          ["assigned", "in_progress"].includes(assignment.status)
+        ).length;
+        const completedEmployeeForms = workerEmployeeForms.filter((assignment) =>
+          assignment.status === "completed"
+        ).length;
         return {
-          id: member.user_id,
+          id: employee.id,
+          userId: employee.user_id || null,
+          employeeNumber: employee.employee_number || null,
           name,
           initials: name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("") || "SO",
-          role: readableRole(member.role),
+          role: linkedRole ? readableRole(linkedRole) : employee.job_title || "Employee",
+          jobTitle: employee.job_title || "",
+          department: employee.department || "",
+          workEmail: employee.work_email || "",
+          employmentStatus: readableStatus(employee.employment_status),
           locationId: primaryLocationId,
           locationIds,
           training: workerAssignments.length
             ? Math.round((completeAssignments / workerAssignments.length) * 100)
             : 0,
           credentials: `${workerCertifications.length} record${workerCertifications.length === 1 ? "" : "s"}`,
-          status: hasExpired ? "Expired" : hasDueSoon ? "Due soon" : hasTrainingDue ? "Training due" : "Current"
+          documentCount: workerDocuments.length + workerEmployeeForms.length,
+          pendingDocuments: pendingDocuments + pendingEmployeeForms,
+          pendingEmployeeForms,
+          completedEmployeeForms,
+          status: hasExpired
+            ? "Expired"
+            : hasDueSoon
+              ? "Due soon"
+              : pendingDocuments || pendingEmployeeForms
+                ? "Form due"
+                : hasTrainingDue
+                  ? "Training due"
+                  : "Current"
         };
       });
 
@@ -1394,7 +1525,10 @@
           due: dueDates.length ? formatShortDate(dueDates[0]) : "Not assigned",
           currentVersion: course.current_version,
           currentVersionId: currentVersion?.id || null,
-          published: Boolean(currentVersion?.published)
+          published: Boolean(currentVersion?.published),
+          validityMonths: course.validity_months,
+          retentionMonths: course.default_retention_months,
+          retentionBasis: course.retention_basis || { status: "review_required" }
         };
       });
 
@@ -1414,12 +1548,225 @@
       data.actions = (actionsResult.data || []).map((action) => ({
         id: action.id,
         title: action.title,
+        description: action.description || "",
         source: readableStatus(action.source_type),
-        owner: memberNameById.get(action.assigned_to) || "Unassigned",
+        sourceId: action.source_id,
+        committeeMeetingId: action.committee_meeting_id,
+        ownerId: action.assigned_employee_id,
+        owner: data.people.find((person) => person.id === action.assigned_employee_id)?.name
+          || memberNameById.get(action.assigned_to)
+          || "Unassigned",
         locationId: action.location_id,
         due: formatShortDate(action.due_at),
+        dueAt: action.due_at,
         priority: readableStatus(action.priority),
-        status: readableStatus(action.status)
+        status: readableStatus(action.status),
+        requiredEvidence: action.required_evidence || "",
+        closeoutNote: action.closeout_note || "",
+        createdAt: action.created_at
+      }));
+
+      data.trainingRequirements = rawTrainingRequirements.map((requirement) => ({
+        id: requirement.id,
+        locationId: requirement.location_id,
+        employeeId: requirement.employee_id,
+        courseId: requirement.course_id,
+        reason: requirement.requirement_reason,
+        cadenceMonths: requirement.cadence_months,
+        retentionMonths: requirement.retention_months,
+        retentionBasis: requirement.retention_basis || { status: "review_required" },
+        regulatoryBasis: requirement.regulatory_basis || [],
+        active: requirement.active
+      }));
+
+      data.trainingCompletions = rawTrainingCompletions.map((completion) => ({
+        id: completion.id,
+        assignmentId: completion.assignment_id,
+        employeeId: completion.employee_id,
+        locationId: completion.location_id,
+        courseId: completion.course_id,
+        courseVersion: completion.course_version,
+        requirementId: completion.requirement_id,
+        completedAt: completion.completed_at,
+        completed: formatShortDate(completion.completed_at),
+        validUntil: completion.valid_until,
+        validThrough: formatShortDate(completion.valid_until, "No renewal set"),
+        retainUntil: completion.retain_until,
+        retainThrough: formatShortDate(completion.retain_until, "Policy review required"),
+        retentionStatus: readableStatus(completion.retention_status),
+        completionMethod: readableStatus(completion.completion_method),
+        quizScore: completion.quiz_score,
+        instructorName: completion.instructor_name || "",
+        completionSha256: completion.completion_sha256
+      }));
+
+      data.trainingAssignments = rawAssignments.map((assignment) => {
+        const completion = data.trainingCompletions.find((item) =>
+          item.assignmentId === assignment.id
+        );
+        const requirement = data.trainingRequirements.find((item) =>
+          item.id === assignment.requirement_id
+        );
+        const dueTime = assignment.due_at ? new Date(assignment.due_at).getTime() : null;
+        const terminal = ["complete", "completed", "waived"].includes(assignment.status);
+        return {
+          id: assignment.id,
+          employeeId: assignment.employee_id,
+          employee: data.people.find((person) => person.id === assignment.employee_id)?.name || "Employee record",
+          locationId: assignment.location_id,
+          courseId: assignment.course_id,
+          course: data.courses.find((course) => course.id === assignment.course_id)?.name || "Training course",
+          courseVersion: assignment.course_version,
+          requirementId: assignment.requirement_id,
+          reason: requirement?.reason || "Company safety requirement",
+          assignedAt: assignment.assigned_at,
+          assigned: formatShortDate(assignment.assigned_at),
+          dueAt: assignment.due_at,
+          due: formatShortDate(assignment.due_at),
+          completedAt: assignment.completed_at,
+          validUntil: completion?.validUntil || assignment.valid_until,
+          retainUntil: completion?.retainUntil || assignment.retain_until,
+          retainThrough: completion?.retainThrough
+            || formatShortDate(assignment.retain_until, "Policy review required"),
+          retentionStatus: completion?.retentionStatus || readableStatus(assignment.retention_status),
+          status: !terminal && dueTime && dueTime < Date.now()
+            ? "Overdue"
+            : readableStatus(assignment.status),
+          completion
+        };
+      });
+
+      data.employeeSignatures = rawEmployeeSignatures.map((signature) => ({
+        id: signature.id,
+        employeeDocumentId: signature.employee_document_id,
+        employeeId: signature.employee_id,
+        authenticatedActorUserId: signature.authenticated_actor_user_id,
+        facilitatorUserId: signature.facilitator_user_id,
+        signerName: signature.signer_name_snapshot,
+        authenticatedActorRole: readableRole(signature.authenticated_actor_role_snapshot),
+        method: readableStatus(signature.signature_method),
+        identityVerification: readableStatus(signature.identity_verification_method),
+        facilitatorAttestation: signature.facilitator_attestation,
+        intent: signature.signature_intent,
+        sourceSha256: signature.signed_source_sha256,
+        signatureSha256: signature.signature_sha256,
+        signedAt: signature.signed_at
+      }));
+
+      data.employeeDocuments = rawEmployeeDocuments.map((documentRecord) => {
+        const signature = data.employeeSignatures.find((item) =>
+          item.employeeDocumentId === documentRecord.id
+        );
+        return {
+          id: documentRecord.id,
+          employeeId: documentRecord.employee_id,
+          employee: data.people.find((person) => person.id === documentRecord.employee_id)?.name || "Employee record",
+          locationId: documentRecord.location_id,
+          kind: documentRecord.document_kind,
+          title: documentRecord.title,
+          documentDate: documentRecord.document_date,
+          status: readableStatus(documentRecord.status),
+          rawStatus: documentRecord.status,
+          filename: documentRecord.original_filename,
+          mimeType: documentRecord.mime_type,
+          sizeBytes: Number(documentRecord.size_bytes || 0),
+          contentSha256: documentRecord.document_sha256,
+          validationStatus: readableStatus(documentRecord.validation_status),
+          malwareScanStatus: readableStatus(documentRecord.malware_scan_status),
+          signatureIntent: documentRecord.signature_intent,
+          signatureDueAt: documentRecord.signature_due_at,
+          signatureDue: formatShortDate(documentRecord.signature_due_at, "No due date"),
+          retentionBasis: documentRecord.retention_basis || { status: "review_required" },
+          retainUntil: documentRecord.retain_until,
+          retainThrough: formatShortDate(documentRecord.retain_until, "Policy review required"),
+          legalHold: documentRecord.legal_hold,
+          signedAt: documentRecord.signed_at,
+          signature
+        };
+      });
+
+      data.employeeFormSubmissions = rawEmployeeFormSubmissions.map((submission) => ({
+        id: submission.id,
+        assignmentId: submission.assignment_id,
+        employeeId: submission.employee_id,
+        locationId: submission.location_id,
+        programVersionId: submission.program_version_id,
+        formTemplateVersionId: submission.form_template_version_id,
+        employeeName: submission.employee_name_snapshot,
+        facilitatorName: submission.facilitator_name_snapshot,
+        facilitatorRole: readableRole(submission.facilitator_role_snapshot),
+        identityVerification: readableStatus(submission.identity_verification_method),
+        schemaSha256: submission.form_schema_sha256,
+        wasOverdue: Boolean(submission.was_overdue),
+        submittedAt: submission.submitted_at,
+        submitted: formatShortDate(submission.submitted_at),
+        submissionSha256: submission.submission_sha256
+      }));
+
+      data.employeeFormAssignments = rawEmployeeFormAssignments.map((assignment) => {
+        const formVersion = rawProgramFormVersions.find((version) =>
+          version.id === assignment.form_template_version_id
+        );
+        const formTemplate = rawProgramFormTemplates.find((template) =>
+          template.id === formVersion?.template_id
+        );
+        const submission = data.employeeFormSubmissions.find((item) =>
+          item.assignmentId === assignment.id
+        );
+        const dueTime = assignment.due_at ? new Date(assignment.due_at).getTime() : null;
+        const open = ["assigned", "in_progress"].includes(assignment.status);
+        return {
+          id: assignment.id,
+          employeeId: assignment.employee_id,
+          employee: data.people.find((person) => person.id === assignment.employee_id)?.name || "Employee record",
+          locationId: assignment.location_id,
+          programVersionId: assignment.program_version_id,
+          formTemplateVersionId: assignment.form_template_version_id,
+          formTemplateId: formVersion?.template_id || null,
+          formTitle: formVersion?.title || formTemplate?.name || assignment.title,
+          title: assignment.title,
+          instructions: assignment.instructions || "",
+          rawStatus: assignment.status,
+          status: open && dueTime && dueTime < Date.now()
+            ? "Overdue"
+            : readableStatus(assignment.status),
+          dueAt: assignment.due_at,
+          due: formatShortDate(assignment.due_at, "No due date"),
+          assignedAt: assignment.assigned_at,
+          startedAt: assignment.started_at,
+          completedAt: assignment.completed_at,
+          submission
+        };
+      });
+
+      data.committeeMeetings = rawCommitteeMeetings.map((meeting) => ({
+        id: meeting.id,
+        locationId: meeting.location_id,
+        scope: meeting.scope,
+        title: meeting.title,
+        meetingDate: meeting.meeting_date,
+        date: formatShortDate(meeting.meeting_date),
+        status: readableStatus(meeting.status),
+        rawStatus: meeting.status,
+        chairEmployeeId: meeting.chair_employee_id,
+        chair: data.people.find((person) => person.id === meeting.chair_employee_id)?.name || "Unassigned",
+        agenda: meeting.agenda || "",
+        notes: meeting.notes || "",
+        decisions: meeting.decisions || "",
+        nextMeetingAt: meeting.next_meeting_at,
+        minutesSha256: meeting.minutes_sha256,
+        attendees: (meeting.safety_committee_attendees || []).map((attendee) => ({
+          id: attendee.id,
+          employeeId: attendee.employee_id,
+          employee: data.people.find((person) => person.id === attendee.employee_id)?.name || "Employee record",
+          role: readableStatus(attendee.committee_role),
+          status: readableStatus(attendee.attendance_status),
+          method: readableStatus(attendee.attendance_method)
+        })),
+        actionCount: data.actions.filter((action) => action.committeeMeetingId === meeting.id).length,
+        openActionCount: data.actions.filter((action) =>
+          action.committeeMeetingId === meeting.id && action.status !== "Closed"
+        ).length
       }));
 
       data.documents = (documentsResult.data || []).map((documentRecord) => {
@@ -1762,18 +2109,46 @@
             progress: 0,
             status: action.status
           })),
-        ...rawAssignments
-          .filter((assignment) => !["complete", "completed", "waived"].includes(assignment.status))
+        ...data.trainingAssignments
+          .filter((assignment) => !["Complete", "Completed", "Waived"].includes(assignment.status))
           .map((assignment) => ({
             id: `task-training-${assignment.id}`,
             type: "Training",
-            title: data.courses.find((course) => course.id === assignment.course_id)?.name || "Training assignment",
-            locationId: assignment.location_id,
-            owner: memberNameById.get(assignment.worker_profile_id) || "Assigned worker",
-            due: formatShortDate(assignment.due_at),
+            title: assignment.course,
+            locationId: assignment.locationId,
+            owner: assignment.employee,
+            due: assignment.due,
             priority: "Medium",
-            progress: assignment.status === "in_progress" ? 50 : 0,
-            status: readableStatus(assignment.status)
+            progress: assignment.status === "In Progress" ? 50 : 0,
+            status: assignment.status
+          })),
+        ...data.employeeFormAssignments
+          .filter((assignment) => ["assigned", "in_progress"].includes(assignment.rawStatus))
+          .map((assignment) => ({
+            id: `task-employee-form-${assignment.id}`,
+            type: "Employee form",
+            title: assignment.title,
+            locationId: assignment.locationId,
+            owner: assignment.employee,
+            due: assignment.due,
+            priority: assignment.status === "Overdue" ? "High" : "Medium",
+            progress: assignment.rawStatus === "in_progress" ? 25 : 0,
+            status: assignment.status,
+            employeeFormAssignmentId: assignment.id
+          })),
+        ...data.employeeDocuments
+          .filter((documentRecord) => documentRecord.rawStatus === "awaiting_signature")
+          .map((documentRecord) => ({
+            id: `task-employee-document-${documentRecord.id}`,
+            type: "Employee form",
+            title: documentRecord.title,
+            locationId: documentRecord.locationId,
+            owner: documentRecord.employee,
+            due: documentRecord.signatureDue,
+            priority: "High",
+            progress: 0,
+            status: "Awaiting signature",
+            employeeDocumentId: documentRecord.id
           })),
         ...data.programAssignments
           .filter((assignment) => (
@@ -2342,6 +2717,7 @@
   function navItem(item) {
     const liveCount = {
       "my-work": data.tasks.length,
+      committee: data.committeeMeetings.filter((meeting) => meeting.rawStatus === "draft").length,
       training: data.tasks.filter((task) => task.type === "Training").length,
       incidents: data.incidents.filter((incident) => incident.status !== "Closed").length,
       actions: data.actions.filter((action) => action.status !== "Closed").length
@@ -2479,6 +2855,9 @@
         <button class="button primary" type="button" ${canReport && hasStartableTemplate ? "" : "disabled"} data-action="open-modal" data-modal="inspection">Start inspection</button>
       `;
     }
+    if (view === "committee") {
+      return `<button class="button primary" type="button" ${canWriteLocation() ? "" : "disabled"} data-action="open-modal" data-modal="committee">New meeting</button>`;
+    }
     if (view === "training") {
       return `
         <button class="button" type="button" data-action="prototype-action" data-message="Course authoring will support video, PDF, quiz, and practical verification blocks.">Create course</button>
@@ -2508,7 +2887,11 @@
       `;
     }
     if (view === "people") {
-      return `<button class="button primary" type="button" data-action="prototype-action" data-message="Invitations will be email-based and scoped to a company role and one or more locations.">Invite worker</button>`;
+      return `
+        <button class="button" type="button" ${canManageCompany() ? "" : "disabled"} data-action="open-modal" data-modal="employee">Add employee</button>
+        <button class="button primary" type="button" ${canWriteLocation() && data.people.length ? "" : "disabled"} data-action="open-modal" data-modal="employee-form-assignment">Assign form</button>
+        <button class="button" type="button" ${canWriteLocation() && data.people.length ? "" : "disabled"} data-action="open-modal" data-modal="employee-document">Employee PDF</button>
+      `;
     }
     if (view === "locations") {
       return `<button class="button primary" type="button" ${canManageCompany() ? "" : "disabled"} data-action="open-modal" data-modal="location">Add location</button>`;
@@ -2545,10 +2928,31 @@
       .filter((value) => typeof value === "number");
     const documentAcknowledgements = average(knownAcknowledgements);
     const selectedPeople = filterLocation(data.people);
+    const selectedEmployeeDocuments = filterLocation(data.employeeDocuments);
+    const selectedEmployeeFormAssignments = filterLocation(data.employeeFormAssignments);
+    const employeeFormsPending = selectedEmployeeDocuments.filter((documentRecord) =>
+      documentRecord.rawStatus === "awaiting_signature"
+    ).length + selectedEmployeeFormAssignments.filter((assignment) =>
+      ["assigned", "in_progress"].includes(assignment.rawStatus)
+    ).length;
+    const employeeFormsComplete = selectedEmployeeDocuments.filter((documentRecord) =>
+      ["signed", "signed_upload"].includes(documentRecord.rawStatus)
+    ).length + selectedEmployeeFormAssignments.filter((assignment) =>
+      assignment.rawStatus === "completed"
+    ).length;
     const credentialsCurrent = selectedPeople.length
       ? Math.round((selectedPeople.filter((person) => person.status === "Current").length / selectedPeople.length) * 100)
       : 0;
-    return { training, inspections, urgent, openIncidents, documentAcknowledgements, credentialsCurrent };
+    return {
+      training,
+      inspections,
+      urgent,
+      openIncidents,
+      documentAcknowledgements,
+      credentialsCurrent,
+      employeeFormsPending,
+      employeeFormsComplete
+    };
   }
 
   function locationReadinessScore(location) {
@@ -2575,12 +2979,12 @@
   function taskIconClass(type) {
     if (type === "Training") return "training";
     if (type === "Corrective action") return "action";
-    if (type === "Document") return "document";
+    if (["Document", "Employee form"].includes(type)) return "document";
     return "";
   }
 
   function taskIcon(type) {
-    const map = { Inspection: "F", Training: "T", "Corrective action": "A", Document: "D" };
+    const map = { Inspection: "F", Training: "T", "Corrective action": "A", Document: "D", "Employee form": "E" };
     return map[type] || "•";
   }
 
@@ -2604,6 +3008,8 @@
             </div>
             <div class="task-side">
               <span class="task-due">${escapeHtml(task.due)}</span>
+              ${task.employeeFormAssignmentId ? `<button class="button small primary" type="button" data-action="start-employee-form-handoff" data-assignment-id="${task.employeeFormAssignmentId}">Start tablet form</button>` : ""}
+              ${task.employeeDocumentId ? `<button class="button small primary" type="button" data-action="open-employee-sign" data-document-id="${task.employeeDocumentId}">Review &amp; sign</button>` : ""}
               <div class="progress" title="${task.progress}% complete">
                 <span style="--progress:${task.progress}%;--progress-color:${task.priority === "Critical" ? "var(--red)" : "var(--accent)"}"></span>
               </div>
@@ -2646,7 +3052,7 @@
         ${renderMetricCard("Training current", `${metrics.training}%`, "from live assignments", "T", "var(--purple)", "")}
         ${renderMetricCard("Inspections complete", `${metrics.inspections}%`, "from live inspection records", "F", "var(--blue)", "")}
         ${renderMetricCard("High-priority actions", metrics.urgent, "open across selected sites", "A", "var(--red)", metrics.urgent ? "Needs review" : "No high-priority action", Boolean(metrics.urgent))}
-        ${renderMetricCard("Days without recordable", data.company.daysWithoutRecordable ?? "—", `${metrics.openIncidents} open incident${metrics.openIncidents === 1 ? "" : "s"}`, "✓", "var(--accent)", data.company.daysWithoutRecordable === null ? "Awaiting verified history" : "")}
+        ${renderMetricCard("Employee forms", metrics.employeeFormsPending, `${metrics.employeeFormsComplete} completed or uploaded`, "E", "var(--accent)", metrics.employeeFormsPending ? "Awaiting employee" : "Current", Boolean(metrics.employeeFormsPending))}
       </section>
       <section class="dashboard-grid">
         <div class="stack">
@@ -2831,8 +3237,74 @@
     `;
   }
 
+  function renderCommittee() {
+    const meetings = filterLocation(data.committeeMeetings);
+    const meetingIds = new Set(meetings.map((meeting) => meeting.id));
+    const committeeActions = filterLocation(data.actions).filter((action) =>
+      action.committeeMeetingId && meetingIds.has(action.committeeMeetingId)
+    );
+    const openActions = committeeActions.filter((action) => action.status !== "Closed");
+    return `
+      ${renderPageHeading()}
+      <section class="split-summary">
+        <article class="summary-card"><span>Meetings recorded</span><strong>${meetings.length}</strong></article>
+        <article class="summary-card"><span>Draft minutes</span><strong>${meetings.filter((meeting) => meeting.rawStatus === "draft").length}</strong></article>
+        <article class="summary-card"><span>Open action items</span><strong>${openActions.length}</strong></article>
+      </section>
+      <section class="committee-grid" aria-label="Safety committee meeting records">
+        ${meetings.map((meeting) => {
+          const meetingActions = committeeActions.filter((action) =>
+            action.committeeMeetingId === meeting.id
+          );
+          return `
+            <article class="meeting-card">
+              <header>
+                <div>
+                  <p class="section-kicker">${escapeHtml(meeting.date)} · ${escapeHtml(locationName(meeting.locationId))}</p>
+                  <h2>${escapeHtml(meeting.title)}</h2>
+                </div>
+                ${statusPill(meeting.status, meeting.rawStatus === "finalized" ? "green" : "amber")}
+              </header>
+              <div class="meeting-meta">
+                <span><strong>${meeting.attendees.length}</strong> attendee${meeting.attendees.length === 1 ? "" : "s"}</span>
+                <span><strong>${meetingActions.length}</strong> action item${meetingActions.length === 1 ? "" : "s"}</span>
+                <span>Chair: <strong>${escapeHtml(meeting.chair)}</strong></span>
+              </div>
+              <div class="employee-record-grid">
+                <section class="employee-record-section">
+                  <span>Notes</span>
+                  <p>${escapeHtml(meeting.notes || "No notes recorded yet.")}</p>
+                </section>
+                <section class="employee-record-section">
+                  <span>Decisions</span>
+                  <p>${escapeHtml(meeting.decisions || "No decisions recorded yet.")}</p>
+                </section>
+              </div>
+              ${meetingActions.length ? `
+                <div class="employee-document-list">
+                  ${meetingActions.map((action) => `
+                    <div class="employee-document-row">
+                      <div><strong>${escapeHtml(action.title)}</strong><span>${escapeHtml(action.owner)} · due ${escapeHtml(action.due)}</span></div>
+                      ${statusPill(action.status)}
+                    </div>
+                  `).join("")}
+                </div>
+              ` : ""}
+              ${meeting.minutesSha256 ? `<p class="secondary-line">Final minutes SHA-256 · <code>${escapeHtml(meeting.minutesSha256.slice(0, 16))}…</code></p>` : ""}
+              <footer class="card-footer row-actions">
+                <button class="button small" type="button" ${meeting.rawStatus === "draft" && canWriteLocation(meeting.locationId) ? "" : "disabled"} data-action="open-modal" data-modal="action" data-meeting-id="${meeting.id}">Add action</button>
+                <button class="button small primary" type="button" ${meeting.rawStatus === "draft" && canWriteLocation(meeting.locationId) && meeting.notes.trim() ? "" : "disabled"} data-action="finalize-committee" data-meeting-id="${meeting.id}">Finalize minutes</button>
+              </footer>
+            </article>
+          `;
+        }).join("") || renderEmptyState("C", "No committee meetings", "Record the first meeting to connect minutes, attendance, owners, due dates, and training needs.")}
+      </section>
+    `;
+  }
+
   function renderTraining() {
     const people = filterLocation(data.people);
+    const assignments = filterLocation(data.trainingAssignments);
     const avg = average(people.map((person) => person.training));
     const assignmentsDue = filterLocation(data.tasks).filter((task) => task.type === "Training").length;
     const credentialsExpiring = people.filter((person) => ["Due soon", "Expired"].includes(person.status)).length;
@@ -2892,7 +3364,31 @@
                   <td>${escapeHtml(person.credentials)}</td>
                   <td>${statusPill(person.status)}</td>
                 </tr>
-              `).join("") || `<tr><td colspan="5">${renderEmptyState("P", "No workers", "Invite company members and assign them to locations to begin readiness tracking.")}</td></tr>`}
+              `).join("") || `<tr><td colspan="5">${renderEmptyState("P", "No employees", "Add employees and assign them to locations to begin readiness tracking.")}</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <div style="height:17px"></div>
+      <section class="table-card">
+        <div class="table-header">
+          <div><h2>Training assignment &amp; retention register</h2><p>Who needs what, when it was completed, and how long the proof is retained</p></div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Employee</th><th>Requirement</th><th>Due / completed</th><th>Valid through</th><th>Retain through</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              ${assignments.map((assignment) => `
+                <tr>
+                  <td class="primary-cell">${escapeHtml(assignment.employee)}<span class="secondary-line">${escapeHtml(locationName(assignment.locationId))}</span></td>
+                  <td class="primary-cell">${escapeHtml(assignment.course)}<span class="secondary-line">${escapeHtml(assignment.reason)}</span></td>
+                  <td>${assignment.completedAt ? escapeHtml(formatShortDate(assignment.completedAt)) : escapeHtml(assignment.due)}</td>
+                  <td>${escapeHtml(formatShortDate(assignment.validUntil, "No renewal set"))}</td>
+                  <td><span class="retention-badge ${assignment.retainUntil ? "" : "review"}">${escapeHtml(assignment.retainThrough)}</span></td>
+                  <td>${statusPill(assignment.status)}</td>
+                  <td><button class="button small" type="button" ${["Complete", "Completed", "Waived"].includes(assignment.status) || !canWriteLocation(assignment.locationId) ? "disabled" : ""} data-action="open-modal" data-modal="training-completion" data-assignment-id="${assignment.id}">Record completion</button></td>
+                </tr>
+              `).join("") || `<tr><td colspan="7">${renderEmptyState("T", "No training assignments", "Assign a published course to one employee or a location roster.")}</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -4095,8 +4591,8 @@
       ${renderPageHeading()}
       <section class="split-summary">
         <article class="summary-card"><span>Active workers</span><strong>${activeLocation() ? activeLocation().people : data.company.activeWorkers}</strong></article>
-        <article class="summary-card"><span>Credentials due soon</span><strong>${people.filter((person) => person.status === "Due soon").length}</strong></article>
-        <article class="summary-card"><span>Expired credentials</span><strong>${people.filter((person) => person.status === "Expired").length}</strong></article>
+        <article class="summary-card"><span>Employee forms pending</span><strong>${people.reduce((sum, person) => sum + person.pendingDocuments, 0)}</strong></article>
+        <article class="summary-card"><span>Training / credential attention</span><strong>${people.filter((person) => person.status !== "Current").length}</strong></article>
       </section>
       <section class="table-card">
         <div class="table-header">
@@ -4111,7 +4607,7 @@
         </div>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Worker</th><th>Primary location</th><th>Training</th><th>Credentials</th><th>Readiness</th></tr></thead>
+            <thead><tr><th>Employee</th><th>Primary location</th><th>Training</th><th>Employee forms</th><th>Readiness</th><th></th></tr></thead>
             <tbody>
               ${people.map((person) => `
                 <tr>
@@ -4128,14 +4624,123 @@
                       <div class="progress"><span style="--progress:${person.training}%;--progress-color:${person.training < 85 ? "var(--amber)" : "var(--accent)"}"></span></div>
                     </div>
                   </td>
-                  <td>${escapeHtml(person.credentials)}</td>
+                  <td>${person.documentCount} record${person.documentCount === 1 ? "" : "s"}<span class="secondary-line">${person.pendingDocuments} awaiting completion</span></td>
                   <td>${statusPill(person.status)}</td>
+                  <td><button class="button small" type="button" data-action="open-employee" data-employee-id="${person.id}">Open record</button></td>
                 </tr>
-              `).join("")}
+              `).join("") || `<tr><td colspan="6">${renderEmptyState("P", "No employees", "Add the first employee to begin training, form, and retention tracking.")}</td></tr>`}
             </tbody>
           </table>
         </div>
       </section>
+    `;
+  }
+
+  function renderEmployeeDrawer() {
+    if (!state.employeeDrawerId) return "";
+    const person = data.people.find((item) => item.id === state.employeeDrawerId);
+    if (!person) return "";
+    const assignments = data.trainingAssignments.filter((assignment) =>
+      assignment.employeeId === person.id
+    );
+    const employeeDocuments = data.employeeDocuments.filter((documentRecord) =>
+      documentRecord.employeeId === person.id
+    );
+    const employeeForms = data.employeeFormAssignments.filter((assignment) =>
+      assignment.employeeId === person.id
+    );
+    const pendingDocuments = employeeDocuments.filter((documentRecord) =>
+      documentRecord.rawStatus === "awaiting_signature"
+    );
+    const pendingEmployeeForms = employeeForms.filter((assignment) =>
+      ["assigned", "in_progress"].includes(assignment.rawStatus)
+    );
+    const retainedCompletions = assignments.filter((assignment) => assignment.completion).length;
+    return `
+      <div class="program-drawer-backdrop" data-action="backdrop-close-employee"></div>
+      <aside class="employee-record-drawer" role="dialog" aria-modal="true" aria-labelledby="employee-record-title">
+        <header class="program-drawer-header">
+          <div class="person-cell">
+            <span class="avatar">${escapeHtml(person.initials)}</span>
+            <div>
+              <p class="section-kicker">Employee safety record</p>
+              <h2 id="employee-record-title">${escapeHtml(person.name)}</h2>
+              <p>${escapeHtml(person.role)} · ${escapeHtml(locationName(person.locationId))}</p>
+            </div>
+          </div>
+          <button class="icon-button" type="button" data-action="close-employee" aria-label="Close employee record">×</button>
+        </header>
+        <div class="program-drawer-body">
+          <section class="workflow-status-grid">
+            <article><span>Training assigned</span><strong>${assignments.length}</strong></article>
+            <article><span>Completions retained</span><strong>${retainedCompletions}</strong></article>
+            <article><span>Forms pending</span><strong>${pendingDocuments.length + pendingEmployeeForms.length}</strong></article>
+            <article><span>Employee records</span><strong>${employeeDocuments.length + employeeForms.length}</strong></article>
+          </section>
+          <div class="row-actions">
+            <button class="button small" type="button" ${canWriteLocation(person.locationId) ? "" : "disabled"} data-action="open-modal" data-modal="training" data-employee-id="${person.id}">Assign training</button>
+            <button class="button small primary" type="button" ${canWriteLocation(person.locationId) ? "" : "disabled"} data-action="open-modal" data-modal="employee-form-assignment" data-employee-id="${person.id}">Assign employee form</button>
+            <button class="button small" type="button" ${canWriteLocation(person.locationId) ? "" : "disabled"} data-action="open-modal" data-modal="employee-document" data-employee-id="${person.id}" data-document-kind="signature_request">Request PDF acknowledgement</button>
+            <button class="button small" type="button" ${canWriteLocation(person.locationId) ? "" : "disabled"} data-action="open-modal" data-modal="employee-document" data-employee-id="${person.id}" data-document-kind="signed_upload">Upload signed PDF</button>
+          </div>
+          <section class="employee-record-section">
+            <h3>Training &amp; retention</h3>
+            <div class="employee-document-list">
+              ${assignments.map((assignment) => `
+                <div class="employee-document-row">
+                  <div>
+                    <strong>${escapeHtml(assignment.course)}</strong>
+                    <span>${assignment.completedAt ? `Completed ${escapeHtml(formatShortDate(assignment.completedAt))}` : `Due ${escapeHtml(assignment.due)}`} · retain ${escapeHtml(assignment.retainThrough)}</span>
+                  </div>
+                  <div class="row-actions">
+                    ${statusPill(assignment.status)}
+                    <button class="button small" type="button" ${assignment.completedAt || !canWriteLocation(assignment.locationId) ? "disabled" : ""} data-action="open-modal" data-modal="training-completion" data-assignment-id="${assignment.id}">Record completion</button>
+                  </div>
+                </div>
+              `).join("") || `<p>No training has been assigned.</p>`}
+            </div>
+          </section>
+          <section class="employee-record-section">
+            <h3>Employee forms</h3>
+            <div class="employee-document-list">
+              ${employeeForms.map((assignment) => `
+                <div class="employee-document-row">
+                  <div>
+                    <strong>${escapeHtml(assignment.title)}</strong>
+                    <span>${escapeHtml(assignment.formTitle)} Â· due ${escapeHtml(assignment.due)}</span>
+                    ${assignment.submission ? `<span class="secondary-line">Submission SHA-256 Â· <code>${escapeHtml(assignment.submission.submissionSha256.slice(0, 16))}â€¦</code></span>` : ""}
+                  </div>
+                  <div class="row-actions">
+                    ${statusPill(assignment.status)}
+                    ${["assigned", "in_progress"].includes(assignment.rawStatus) ? `<button class="button small primary" type="button" data-action="start-employee-form-handoff" data-assignment-id="${assignment.id}">Start tablet form</button>` : ""}
+                  </div>
+                </div>
+              `).join("") || `<p>No employee forms have been assigned.</p>`}
+            </div>
+          </section>
+          <section class="employee-record-section">
+            <h3>PDFs &amp; signatures</h3>
+            <div class="employee-document-list">
+              ${employeeDocuments.map((documentRecord) => `
+                <div class="employee-document-row">
+                  <div>
+                    <strong>${escapeHtml(documentRecord.title)}</strong>
+                    <span>${escapeHtml(documentRecord.filename)} · ${escapeHtml(documentRecord.retainThrough)}</span>
+                    ${documentRecord.malwareScanStatus === "Unavailable" ? `<span class="scan-warning">Format verified; malware scanning is not configured</span>` : ""}
+                    ${documentRecord.signature ? `<span class="secondary-line">Signature SHA-256 · <code>${escapeHtml(documentRecord.signature.signatureSha256.slice(0, 16))}…</code></span>` : ""}
+                  </div>
+                  <div class="row-actions">
+                    ${statusPill(documentRecord.status)}
+                    ${documentRecord.malwareScanStatus === "Unavailable" && canWriteLocation(documentRecord.locationId) ? `<button class="button small" type="button" data-action="retry-employee-document-scan" data-document-id="${documentRecord.id}">Retry security scan</button>` : ""}
+                    ${documentRecord.rawStatus === "awaiting_signature" ? `<button class="button small primary" type="button" data-action="open-employee-sign" data-document-id="${documentRecord.id}">Review &amp; sign</button>` : ""}
+                    ${["awaiting_signature", "signed", "signed_upload"].includes(documentRecord.rawStatus) ? `<button class="button small" type="button" data-action="download-employee-document" data-document-id="${documentRecord.id}">Download</button>` : ""}
+                  </div>
+                </div>
+              `).join("") || `<p>No employee documents have been added.</p>`}
+            </div>
+          </section>
+        </div>
+      </aside>
     `;
   }
 
@@ -4606,6 +5211,7 @@
       dashboard: renderDashboard,
       "my-work": renderMyWork,
       inspections: renderInspections,
+      committee: renderCommittee,
       training: renderTraining,
       incidents: renderIncidents,
       actions: renderActions,
@@ -4788,8 +5394,14 @@
   }
 
   function renderTrainingModal() {
-    const selectedCourse = data.courses.find((course) => course.id === state.selectedTemplateId) || data.courses[0];
-    const selectedLocationId = state.locationId === "all" ? "all" : state.locationId;
+    const selectedCourseId = state.modalContext.courseId || state.selectedTemplateId;
+    const selectedCourse = data.courses.find((course) => course.id === selectedCourseId) || data.courses[0];
+    const selectedPerson = data.people.find((person) => person.id === state.modalContext.employeeId);
+    const selectedLocationId = selectedPerson?.locationId
+      || (state.locationId === "all" ? data.locations[0]?.id : state.locationId);
+    const eligiblePeople = data.people.filter((person) =>
+      person.locationIds?.includes(selectedLocationId) && person.employmentStatus !== "Separated"
+    );
     return `
       <div class="modal-backdrop" data-action="backdrop-close">
         <section class="modal" role="dialog" aria-modal="true" aria-labelledby="training-title">
@@ -4797,7 +5409,7 @@
             <div>
               <p class="section-kicker">Training assignment</p>
               <h2 id="training-title">Assign required training</h2>
-              <p>Target by company, location, role, team, or individual.</p>
+              <p>Assign one employee or the authorized roster at a location, with renewal and retention rules.</p>
             </div>
             <button class="icon-button" type="button" data-action="close-modal" aria-label="Close dialog">×</button>
           </header>
@@ -4811,26 +5423,40 @@
                   </select>
                 </div>
                 <div class="field">
-                  <label for="training-audience">Audience</label>
-                  <select id="training-audience" name="audience" required>
-                    <option value="visible_workers">All authorized workers shown for this location</option>
-                  </select>
+                  <label for="training-location">Location</label>
+                  <select id="training-location" name="location_id" required>${renderLocationOptions(false, selectedLocationId)}</select>
                 </div>
                 <div class="field">
-                  <label for="training-location">Location</label>
-                  <select id="training-location" name="location_id" required>${renderLocationOptions(true, selectedLocationId)}</select>
+                  <label for="training-employee">Employee(s)</label>
+                  <select id="training-employee" name="employee_id" required>
+                    <option value="all" ${selectedPerson ? "" : "selected"}>All employees at this location</option>
+                    ${eligiblePeople.map((person) => `<option value="${person.id}" ${person.id === selectedPerson?.id ? "selected" : ""}>${escapeHtml(person.name)}</option>`).join("")}
+                  </select>
                 </div>
                 <div class="field">
                   <label for="training-due">Due date</label>
                   <input id="training-due" type="date" name="due_date" value="${isoDateOffset(16)}" required>
                 </div>
                 <div class="field">
-                  <label for="training-language">Default language</label>
-                  <select id="training-language" name="language"><option>Worker preference</option><option>English</option><option>Spanish</option></select>
+                  <label for="training-cadence">Renewal cadence (months)</label>
+                  <input id="training-cadence" type="number" min="1" max="240" name="cadence_months" value="${escapeHtml(selectedCourse.validityMonths || "")}" placeholder="Leave blank if no renewal">
+                </div>
+                <div class="field">
+                  <label for="training-retention">Retention (months)</label>
+                  <input id="training-retention" type="number" min="1" max="1200" name="retention_months" value="${escapeHtml(selectedCourse.retentionMonths || "")}" placeholder="Leave blank for policy review">
+                </div>
+                <div class="field full">
+                  <label for="training-reason">Requirement reason</label>
+                  <input id="training-reason" name="reason" value="Company safety requirement" maxlength="500" required>
+                </div>
+                <div class="field full">
+                  <label for="training-regulatory-basis">Regulatory / policy basis (one source per line)</label>
+                  <textarea id="training-regulatory-basis" name="regulatory_basis" maxlength="8000" placeholder="Oregon OSHA 437-002-0227&#10;Company Powered Industrial Truck Program § 4.2"></textarea>
+                  <span class="field-hint">Manual citations are retained as traceable inputs and marked for review until a safety administrator verifies the source.</span>
                 </div>
               </div>
               <div style="height:14px"></div>
-              <div class="prototype-note"><strong>Readiness rule</strong><span>Future assignments can block a permit, equipment authorization, or site-access workflow until required training and practical verification are complete.</span></div>
+              <div class="prototype-note"><strong>Retention trace</strong><span>Leave retention blank when the governing company or regulatory policy has not been reviewed. SafetyOps will display Policy review required instead of inventing a universal OSHA period.</span></div>
             </div>
             <footer class="modal-footer">
               <button class="button" type="button" data-action="close-modal">Cancel</button>
@@ -4843,7 +5469,11 @@
   }
 
   function renderActionModal() {
-    const selectedLocationId = state.locationId === "all" ? data.locations[0].id : state.locationId;
+    const sourceMeeting = data.committeeMeetings.find((meeting) =>
+      meeting.id === state.modalContext.meetingId
+    );
+    const selectedLocationId = sourceMeeting?.locationId
+      || (state.locationId === "all" ? data.locations[0].id : state.locationId);
     const eligibleOwners = data.people.filter((person) =>
       person.locationIds?.includes(selectedLocationId)
     );
@@ -4861,7 +5491,10 @@
           <form id="action-form">
             <div class="modal-body">
               <div class="form-grid">
+                <input type="hidden" name="committee_meeting_id" value="${escapeHtml(sourceMeeting?.id || "")}">
+                ${sourceMeeting ? `<div class="field full"><label>Source meeting</label><input value="${escapeHtml(sourceMeeting.title)} · ${escapeHtml(sourceMeeting.date)}" readonly></div>` : ""}
                 <div class="field full"><label for="action-name">Action</label><input id="action-name" name="title" minlength="3" maxlength="240" required placeholder="Describe the required correction"></div>
+                <div class="field full"><label for="action-description">Details</label><textarea id="action-description" name="description" placeholder="Record the committee decision, expected outcome, or completion criteria"></textarea></div>
                 <div class="field"><label for="action-location">Location</label><select id="action-location" name="location_id" required>${renderLocationOptions(false, selectedLocationId)}</select></div>
                 <div class="field"><label for="action-owner">Owner</label><select id="action-owner" name="owner_id" ${eligibleOwners.length ? "" : "disabled"} required>${eligibleOwners.map((person) => `<option value="${escapeHtml(person.id)}">${escapeHtml(person.name)}</option>`).join("")}</select></div>
                 <div class="field"><label for="action-priority">Priority</label><select id="action-priority" name="priority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></div>
@@ -4873,6 +5506,203 @@
               <button class="button" type="button" data-action="close-modal">Cancel</button>
               <button class="button primary" type="submit" ${eligibleOwners.length ? "" : "disabled"}>Create action</button>
             </footer>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderCommitteeModal() {
+    const selectedLocationId = state.locationId === "all" ? data.locations[0]?.id : state.locationId;
+    const eligiblePeople = data.people.filter((person) =>
+      person.locationIds?.includes(selectedLocationId) && person.employmentStatus !== "Separated"
+    );
+    return `
+      <div class="modal-backdrop" data-action="backdrop-close">
+        <section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="committee-modal-title">
+          <header class="modal-header">
+            <div>
+              <p class="section-kicker">Safety committee record</p>
+              <h2 id="committee-modal-title">Record committee meeting</h2>
+              <p>Capture attendance, notes, decisions, and then assign accountable follow-up work.</p>
+            </div>
+            <button class="icon-button" type="button" data-action="close-modal" aria-label="Close dialog">×</button>
+          </header>
+          <form id="committee-form">
+            <div class="modal-body">
+              <div class="form-grid">
+                <div class="field full"><label for="committee-title">Meeting title</label><input id="committee-title" name="title" minlength="3" maxlength="220" required placeholder="Monthly safety committee meeting"></div>
+                <div class="field"><label for="committee-date">Meeting date</label><input id="committee-date" type="date" name="meeting_date" value="${isoDateOffset()}" required></div>
+                <div class="field"><label for="committee-location">Location</label><select id="committee-location" name="location_id" required>${renderLocationOptions(false, selectedLocationId)}</select></div>
+                <div class="field"><label for="committee-chair">Chair</label><select id="committee-chair" name="chair_employee_id" required>${eligiblePeople.map((person) => `<option value="${person.id}">${escapeHtml(person.name)}</option>`).join("")}</select></div>
+                <div class="field"><label for="committee-attendees">Attendees</label><select id="committee-attendees" name="attendee_ids" multiple size="5" required>${eligiblePeople.map((person) => `<option value="${person.id}" selected>${escapeHtml(person.name)}</option>`).join("")}</select></div>
+                <div class="field full"><label for="committee-agenda">Agenda</label><textarea id="committee-agenda" name="agenda" placeholder="Topics reviewed"></textarea></div>
+                <div class="field full"><label for="committee-notes">Meeting notes</label><textarea id="committee-notes" name="notes" minlength="3" required placeholder="Discussion, observations, and employee input"></textarea></div>
+                <div class="field full"><label for="committee-decisions">Decisions</label><textarea id="committee-decisions" name="decisions" placeholder="Decisions made and controls approved"></textarea></div>
+              </div>
+              <div class="prototype-note"><strong>Traceable follow-up</strong><span>Save the minutes first, add action items with an employee owner and due date, then finalize the meeting to freeze a SHA-256 minutes manifest.</span></div>
+            </div>
+            <footer class="modal-footer">
+              <button class="button" type="button" data-action="close-modal">Cancel</button>
+              <button class="button primary" type="submit" ${eligiblePeople.length ? "" : "disabled"}>Save meeting notes</button>
+            </footer>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderEmployeeModal() {
+    const selectedLocationId = state.locationId === "all" ? data.locations[0]?.id : state.locationId;
+    return `
+      <div class="modal-backdrop" data-action="backdrop-close">
+        <section class="modal" role="dialog" aria-modal="true" aria-labelledby="employee-modal-title">
+          <header class="modal-header">
+            <div><p class="section-kicker">Workforce record</p><h2 id="employee-modal-title">Add employee</h2><p>Create a safety record now; a login account is optional.</p></div>
+            <button class="icon-button" type="button" data-action="close-modal" aria-label="Close dialog">×</button>
+          </header>
+          <form id="employee-form">
+            <div class="modal-body">
+              <div class="form-grid">
+                <div class="field full"><label for="employee-full-name">Employee name</label><input id="employee-full-name" name="full_name" minlength="2" maxlength="160" autocomplete="name" required></div>
+                <div class="field"><label for="employee-number">Employee number</label><input id="employee-number" name="employee_number" maxlength="80"></div>
+                <div class="field"><label for="employee-email">Work email</label><input id="employee-email" name="work_email" type="email" autocomplete="email"></div>
+                <div class="field"><label for="employee-title">Job title</label><input id="employee-title" name="job_title" maxlength="160"></div>
+                <div class="field"><label for="employee-department">Department</label><input id="employee-department" name="department" maxlength="160"></div>
+                <div class="field full"><label for="employee-location">Primary location</label><select id="employee-location" name="location_id" required>${renderLocationOptions(false, selectedLocationId)}</select></div>
+              </div>
+              <div class="prototype-note"><strong>No employee account required</strong><span>The safety user can assign training, upload signed records, and facilitate an in-person tablet acknowledgement for this employee.</span></div>
+            </div>
+            <footer class="modal-footer"><button class="button" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit">Add employee</button></footer>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderTrainingCompletionModal() {
+    const assignment = data.trainingAssignments.find((item) =>
+      item.id === state.modalContext.assignmentId
+    );
+    if (!assignment) return "";
+    return `
+      <div class="modal-backdrop" data-action="backdrop-close">
+        <section class="modal" role="dialog" aria-modal="true" aria-labelledby="training-completion-title">
+          <header class="modal-header"><div><p class="section-kicker">Retention evidence</p><h2 id="training-completion-title">Record training completion</h2><p>${escapeHtml(assignment.employee)} · ${escapeHtml(assignment.course)}</p></div><button class="icon-button" type="button" data-action="close-modal" aria-label="Close dialog">×</button></header>
+          <form id="training-completion-form">
+            <input type="hidden" name="assignment_id" value="${assignment.id}">
+            <div class="modal-body"><div class="form-grid">
+              <div class="field"><label for="training-completed-date">Completed date</label><input id="training-completed-date" name="completed_date" type="date" value="${isoDateOffset()}" required></div>
+              <div class="field"><label for="training-completion-method">Completion method</label><select id="training-completion-method" name="completion_method" required><option value="instructor_led">Instructor led</option><option value="practical_evaluation">Practical evaluation</option><option value="external_record">External record</option><option value="in_app">In app</option></select></div>
+              <div class="field"><label for="training-quiz-score">Quiz score</label><input id="training-quiz-score" name="quiz_score" type="number" min="0" max="100" step="0.01" placeholder="Optional"></div>
+              <div class="field"><label for="training-instructor">Instructor / evaluator</label><input id="training-instructor" name="instructor_name" maxlength="160" placeholder="Optional"></div>
+            </div><div class="prototype-note"><strong>Immutable completion receipt</strong><span>SafetyOps will pin the employee, course version, verifier, completion time, renewal date, retention policy, and a server-derived SHA-256 manifest.</span></div></div>
+            <footer class="modal-footer"><button class="button" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit">Record completion</button></footer>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderEmployeeFormAssignmentModal() {
+    const selectedPerson = data.people.find((person) => person.id === state.modalContext.employeeId);
+    const selectedLocationId = selectedPerson?.locationId
+      || (state.locationId === "all" ? data.locations[0]?.id : state.locationId);
+    const eligiblePeople = data.people.filter((person) =>
+      person.locationIds?.includes(selectedLocationId) && person.employmentStatus !== "Separated"
+    );
+    const eligibleForms = allFormTemplates().filter((template) => (
+      formAvailableForSubmission(template)
+      && template.locations?.includes(selectedLocationId)
+      && !(template.fields || []).some((field) => field.databaseType === "file")
+    ));
+    return `
+      <div class="modal-backdrop" data-action="backdrop-close">
+        <section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="employee-form-assignment-title">
+          <header class="modal-header">
+            <div><p class="section-kicker">Facilitated tablet workflow</p><h2 id="employee-form-assignment-title">Assign employee form</h2><p>Create a dashboard item, then launch a one-time employee-only handoff when the tablet is ready.</p></div>
+            <button class="icon-button" type="button" data-action="close-modal" aria-label="Close dialog">Ã—</button>
+          </header>
+          <form id="employee-form-assignment-form">
+            <div class="modal-body">
+              <div class="form-grid">
+                <div class="field"><label for="employee-form-location">Location</label><select id="employee-form-location" name="location_id" required>${renderLocationOptions(false, selectedLocationId)}</select></div>
+                <div class="field"><label for="employee-form-employee">Employee</label><select id="employee-form-employee" name="employee_id" required>${eligiblePeople.map((person) => `<option value="${person.id}" ${person.id === selectedPerson?.id ? "selected" : ""}>${escapeHtml(person.name)}</option>`).join("")}</select></div>
+                <div class="field full"><label for="employee-form-template">Form template</label><select id="employee-form-template" name="form_template_version_id" required>${eligibleForms.map((template) => `<option value="${template.formTemplateVersionId}">${escapeHtml(template.title)} Â· ${escapeHtml(template.version)}</option>`).join("") || `<option value="">No eligible published forms at this location</option>`}</select></div>
+                <div class="field"><label for="employee-form-due">Due date</label><input id="employee-form-due" name="due_date" type="date" value="${isoDateOffset(7)}"></div>
+                <div class="field"><label for="employee-form-title-input">Assignment title</label><input id="employee-form-title-input" name="title" maxlength="220" placeholder="Defaults to the form title"></div>
+                <div class="field full"><label for="employee-form-instructions">Instructions</label><textarea id="employee-form-instructions" name="instructions" maxlength="2000" placeholder="Optional employee instructions"></textarea></div>
+              </div>
+              <div class="prototype-note"><strong>Employee account not required</strong><span>Starting the form creates a 15-minute, one-time capability in a separate no-opener tab. The employee tab cannot access your dashboard or company data.</span></div>
+            </div>
+            <footer class="modal-footer"><button class="button" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit" ${eligiblePeople.length && eligibleForms.length ? "" : "disabled"}>Assign form</button></footer>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderEmployeeDocumentModal() {
+    const selectedPerson = data.people.find((person) => person.id === state.modalContext.employeeId);
+    const selectedLocationId = selectedPerson?.locationId
+      || (state.locationId === "all" ? data.locations[0]?.id : state.locationId);
+    const eligiblePeople = data.people.filter((person) =>
+      person.locationIds?.includes(selectedLocationId) && person.employmentStatus !== "Separated"
+    );
+    const selectedKind = state.modalContext.documentKind === "signed_upload" ? "signed_upload" : "signature_request";
+    return `
+      <div class="modal-backdrop" data-action="backdrop-close">
+        <section class="modal wide" role="dialog" aria-modal="true" aria-labelledby="employee-document-title">
+          <header class="modal-header"><div><p class="section-kicker">Private employee record</p><h2 id="employee-document-title">Employee document</h2><p>Request an in-person tablet acknowledgement or attach an already-signed PDF.</p></div><button class="icon-button" type="button" data-action="close-modal" aria-label="Close dialog">×</button></header>
+          <form id="employee-document-form">
+            <div class="modal-body"><div class="form-grid">
+              <div class="field"><label for="employee-document-location">Location</label><select id="employee-document-location" name="location_id" required>${renderLocationOptions(false, selectedLocationId)}</select></div>
+              <div class="field"><label for="employee-document-employee">Employee</label><select id="employee-document-employee" name="employee_id" required>${eligiblePeople.map((person) => `<option value="${person.id}" ${person.id === selectedPerson?.id ? "selected" : ""}>${escapeHtml(person.name)}</option>`).join("")}</select></div>
+              <div class="field"><label for="employee-document-workflow">Workflow</label><select id="employee-document-workflow" name="document_kind" required><option value="signature_request" ${selectedKind === "signature_request" ? "selected" : ""}>Request e-signature</option><option value="signed_upload" ${selectedKind === "signed_upload" ? "selected" : ""}>Upload signed PDF</option></select></div>
+              <div class="field"><label for="employee-document-date">Document date</label><input id="employee-document-date" type="date" name="document_date" value="${isoDateOffset()}" required></div>
+              <div class="field full"><label for="employee-document-file">PDF</label><input id="employee-document-file" name="file" type="file" accept=".pdf,application/pdf" required><span class="field-hint">PDF only · maximum 10 MB</span></div>
+              <div class="field full"><label for="employee-document-name">Document title</label><input id="employee-document-name" name="title" minlength="3" maxlength="220" required></div>
+              <div class="field"><label for="employee-document-due">Signature due date</label><input id="employee-document-due" type="date" name="signature_due_date" value="${isoDateOffset(7)}"></div>
+              <div class="field"><label for="employee-document-retention">Retention (months)</label><input id="employee-document-retention" type="number" min="1" max="1200" name="retention_months" placeholder="Leave blank for policy review"></div>
+              <div class="field full"><label for="employee-document-intent">Signature intent</label><textarea id="employee-document-intent" name="signature_intent">I acknowledge that I reviewed this document and understand the requirements that apply to my work.</textarea></div>
+            </div>
+            <div class="scan-warning"><strong>Current file-control stage</strong><span>The Edge authority verifies exact PDF bytes, size, SHA-256, and blocks common active content. Malware scanning is not configured yet and will remain visibly marked unavailable.</span></div></div>
+            <footer class="modal-footer"><button class="button" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit">Prepare secure upload</button></footer>
+          </form>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderEmployeeSignModal() {
+    const documentRecord = data.employeeDocuments.find((item) =>
+      item.id === state.modalContext.documentId
+    );
+    if (!documentRecord) return "";
+    const person = data.people.find((item) => item.id === documentRecord.employeeId);
+    const selfSigning = person?.userId === state.authUser?.id;
+    return `
+      <div class="signing-handoff" role="dialog" aria-modal="true" aria-labelledby="employee-sign-title">
+        <section class="signing-handoff-shell">
+          <header><div><p class="section-kicker">Focused tablet handoff</p><h2 id="employee-sign-title">Employee acknowledgement</h2><p>Hand the tablet to ${escapeHtml(person?.name || documentRecord.employee)}. Other company records stay behind this focused screen.</p></div><button class="button" type="button" data-action="close-modal">Cancel handoff</button></header>
+          <form id="employee-sign-form" class="signing-handoff-body">
+            <input type="hidden" name="employee_document_id" value="${documentRecord.id}">
+            <section class="signing-document-summary">
+              <span>${statusPill("Awaiting signature", "amber")}</span>
+              <h3>${escapeHtml(documentRecord.title)}</h3>
+              <p>${escapeHtml(documentRecord.filename)} · ${escapeHtml(documentRecord.sizeBytes ? `${Math.ceil(documentRecord.sizeBytes / 1024)} KB` : "PDF")}</p>
+              <dl><div><dt>Employee</dt><dd>${escapeHtml(person?.name || documentRecord.employee)}</dd></div><div><dt>Due</dt><dd>${escapeHtml(documentRecord.signatureDue)}</dd></div><div><dt>Document SHA-256</dt><dd><code>${escapeHtml(documentRecord.contentSha256 || "Pending")}</code></dd></div></dl>
+              <button class="button" type="button" data-action="download-employee-document" data-document-id="${documentRecord.id}">Open exact PDF</button>
+            </section>
+            <section class="signing-consent">
+              <h3>Signature intent</h3><p>${escapeHtml(documentRecord.signatureIntent)}</p>
+              <label><input type="checkbox" name="consent_confirmed" required> I have reviewed the document and intend my typed name to be my electronic acknowledgement.</label>
+              ${selfSigning ? "" : `<label><input type="checkbox" name="facilitator_confirmed" required> Facilitator attestation: I confirm the named employee is present and is completing this acknowledgement on this device.</label>`}
+              <label for="employee-typed-name">Typed employee name</label>
+              <input id="employee-typed-name" name="typed_name" autocomplete="off" required placeholder="${escapeHtml(person?.name || documentRecord.employee)}">
+            </section>
+            <section class="signing-evidence"><strong>Evidence captured by SafetyOps</strong><span>The employee, exact PDF hash, intent, typed name, time, authenticated facilitator, and signature hash are derived and stored by PostgreSQL. This creates traceable electronic acknowledgement evidence; it does not alter the source PDF.</span></section>
+            <footer><button class="button" type="button" data-action="close-modal">Cancel</button><button class="button primary" type="submit">Complete acknowledgement</button></footer>
           </form>
         </section>
       </div>
@@ -5015,14 +5845,172 @@
     if (!state.modal) return "";
     if (state.modal === "inspection") return renderInspectionModal();
     if (state.modal === "incident") return renderIncidentModal();
+    if (state.modal === "committee") return renderCommitteeModal();
     if (state.modal === "training") return renderTrainingModal();
+    if (state.modal === "training-completion") return renderTrainingCompletionModal();
     if (state.modal === "action") return renderActionModal();
+    if (state.modal === "employee") return renderEmployeeModal();
+    if (state.modal === "employee-form-assignment") return renderEmployeeFormAssignmentModal();
+    if (state.modal === "employee-document") return renderEmployeeDocumentModal();
+    if (state.modal === "employee-sign") return renderEmployeeSignModal();
     if (state.modal === "form-upload") return renderFormUploadModal();
     if (state.modal === "location") return renderLocationModal();
     return "";
   }
 
+  function renderEmployeeHandoffField(field) {
+    const fieldId = `handoff-field-${field.id}`;
+    const required = field.required ? "required" : "";
+    const requiredLabel = field.required ? ` <span aria-hidden="true">*</span>` : "";
+    const hint = field.helpText ? `<p class="field-hint">${escapeHtml(field.helpText)}</p>` : "";
+    if (field.type === "instruction") {
+      return `<div class="runner-field runner-instruction"><strong>${escapeHtml(field.label)}</strong>${hint}</div>`;
+    }
+    if (field.type === "employee" || field.type === "location") {
+      const value = field.type === "employee"
+        ? state.employeeHandoff.data.employeeName
+        : state.employeeHandoff.data.locationName;
+      return `<div class="runner-field"><span class="field-label">${escapeHtml(field.label)}</span><div class="handoff-pinned-value">${escapeHtml(value)}</div>${hint}</div>`;
+    }
+    if (field.type === "signature") return "";
+    if (field.type === "long_text") {
+      return `<div class="runner-field"><label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label><textarea id="${fieldId}" name="${escapeHtml(field.key)}" placeholder="${escapeHtml(field.placeholder || "")}" ${required}></textarea>${hint}</div>`;
+    }
+    if (field.type === "single_choice") {
+      return `<div class="runner-field"><label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label><select id="${fieldId}" name="${escapeHtml(field.key)}" ${required}><option value="">Choose an option</option>${(field.options || []).map((option) => `<option value="${escapeHtml(option)}">${escapeHtml(option)}</option>`).join("")}</select>${hint}</div>`;
+    }
+    if (field.type === "multi_choice") {
+      return `<fieldset class="runner-field"><legend>${escapeHtml(field.label)}${requiredLabel}</legend><div class="runner-choice-grid">${(field.options || []).map((option, index) => `<div class="runner-option"><input id="${fieldId}-${index}" type="checkbox" name="${escapeHtml(field.key)}" value="${escapeHtml(option)}"><label for="${fieldId}-${index}">${escapeHtml(option)}</label></div>`).join("")}</div>${hint}</fieldset>`;
+    }
+    if (field.type === "boolean") {
+      return `<fieldset class="runner-field"><legend>${escapeHtml(field.label)}${requiredLabel}</legend><div class="runner-choice-grid"><div class="runner-option"><input id="${fieldId}-yes" type="radio" name="${escapeHtml(field.key)}" value="true" ${required}><label for="${fieldId}-yes">Yes</label></div><div class="runner-option"><input id="${fieldId}-no" type="radio" name="${escapeHtml(field.key)}" value="false"><label for="${fieldId}-no">No</label></div></div>${hint}</fieldset>`;
+    }
+    if (field.type === "acknowledgement") {
+      return `<fieldset class="runner-field"><legend>${escapeHtml(field.label)}${requiredLabel}</legend><div class="runner-option"><input id="${fieldId}" name="${escapeHtml(field.key)}" type="checkbox" value="true" ${required}><label for="${fieldId}">I acknowledge this statement</label></div>${hint}</fieldset>`;
+    }
+    const inputType = ({ number: "number", date: "date", time: "time", datetime: "datetime-local" })[field.type] || "text";
+    return `<div class="runner-field"><label for="${fieldId}">${escapeHtml(field.label)}${requiredLabel}</label><input id="${fieldId}" name="${escapeHtml(field.key)}" type="${inputType}" placeholder="${escapeHtml(field.placeholder || "")}" ${required}>${hint}</div>`;
+  }
+
+  function renderEmployeeHandoffScreen() {
+    const handoff = state.employeeHandoff;
+    if (!supabaseClient) {
+      return `<main class="handoff-standalone"><section class="auth-card"><h1>Employee form unavailable</h1><p>The secure data service is not configured on this deployment.</p></section></main>`;
+    }
+    if (handoff.status === "loading") {
+      return `<main class="handoff-standalone"><section class="auth-card"><p class="section-kicker">SafetyOps secure handoff</p><h1>Loading employee formâ€¦</h1><p>Verifying this one-time session without opening the company dashboard.</p></section></main>`;
+    }
+    if (handoff.status === "error") {
+      return `<main class="handoff-standalone"><section class="auth-card"><p class="section-kicker">SafetyOps secure handoff</p><h1>This employee form cannot be opened</h1><p>${escapeHtml(handoff.error || "The link expired, was revoked, or has already been used.")}</p><p>Ask the safety facilitator to start a new tablet session from the dashboard.</p><button class="button" type="button" data-action="close-handoff-window">Close this tab</button></section></main>`;
+    }
+    if (handoff.status === "complete") {
+      return `<main class="handoff-standalone"><section class="handoff-complete-card"><span class="success-mark" aria-hidden="true">âœ“</span><p class="section-kicker">Submission retained</p><h1>Employee form complete</h1><p>Your answers and typed signature were bound to the exact controlled form schema. The safety dashboard will show this item as completed.</p><dl><div><dt>Submitted</dt><dd>${escapeHtml(formatShortDate(handoff.receipt?.submitted_at, "Just now"))}</dd></div><div><dt>Evidence SHA-256</dt><dd><code>${escapeHtml(handoff.receipt?.submission_sha256 || "")}</code></dd></div></dl><button class="button primary" type="button" data-action="close-handoff-window">Close this tab</button></section></main>`;
+    }
+    const item = handoff.data;
+    return `
+      <main class="signing-handoff handoff-standalone" role="main">
+        <section class="signing-handoff-shell employee-form-handoff-shell">
+          <header>
+            <div><p class="section-kicker">${escapeHtml(item.companyName)} Â· secure employee form</p><h1>${escapeHtml(item.title)}</h1><p>${escapeHtml(item.employeeName)} Â· ${escapeHtml(item.locationName)}</p></div>
+            <span class="private-source-badge">One-time session</span>
+          </header>
+          <form id="employee-handoff-form" class="signing-handoff-body">
+            <section class="signing-document-summary">
+              <span>${statusPill("Employee form", "blue")}</span>
+              <h2>Before you begin</h2>
+              <p>${escapeHtml(item.instructions || "Complete every required field, review your answers, and sign with your full name.")}</p>
+              <dl><div><dt>Form version</dt><dd>v${escapeHtml(item.formVersion)}</dd></div><div><dt>Due</dt><dd>${escapeHtml(formatShortDate(item.dueAt, "No due date"))}</dd></div><div><dt>Schema SHA-256</dt><dd><code>${escapeHtml(item.formSchemaSha256)}</code></dd></div></dl>
+            </section>
+            <section class="form-section handoff-response-section">
+              <header class="form-section-header"><h2>Employee response</h2><p>Fields marked with an asterisk are required.</p></header>
+              <div class="form-section-body">${(item.fields || []).map(renderEmployeeHandoffField).join("")}</div>
+            </section>
+            <section class="signing-consent">
+              <h2>Review and sign</h2>
+              <label><input type="checkbox" name="employee_attestation" required> I confirm these answers are mine and complete.</label>
+              <label><input type="checkbox" name="consent_confirmed" required> I intend my typed name to be my electronic signature for this completed form.</label>
+              <label for="handoff-typed-name">Typed employee name</label>
+              <input id="handoff-typed-name" name="typed_name" autocomplete="name" required placeholder="${escapeHtml(item.employeeName)}">
+              <p class="field-hint">Your typed name must match the assigned employee name shown above.</p>
+            </section>
+            <section class="signing-evidence"><strong>What SafetyOps records</strong><span>The exact form version and field hashes, answers, employee name, authenticated facilitator identity, consent, timestamp, overdue state, and canonical evidence SHA-256. Some regulated records may still require additional identity checks or a wet signature.</span></section>
+            <footer><span>This one-time link expires at ${escapeHtml(new Date(item.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))}.</span><button class="button primary" type="submit">Submit completed form</button></footer>
+          </form>
+        </section>
+      </main>
+    `;
+  }
+
+  async function loadEmployeeHandoff() {
+    if (!supabaseClient || !isEmployeeHandoffMode) return;
+    state.employeeHandoff.status = "loading";
+    render();
+    const result = await supabaseClient.rpc("get_employee_form_handoff", {
+      target_token: employeeHandoffToken
+    });
+    if (result.error) {
+      state.employeeHandoff.status = "error";
+      state.employeeHandoff.error = result.error.message || "The one-time employee form link is unavailable.";
+      render();
+      return;
+    }
+    state.employeeHandoff.data = result.data;
+    state.employeeHandoff.status = "ready";
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}#employee-form`);
+    render();
+    requestAnimationFrame(() => document.querySelector("#employee-handoff-form input, #employee-handoff-form select, #employee-handoff-form textarea")?.focus());
+  }
+
+  function collectEmployeeHandoffAnswers(form) {
+    const formData = new FormData(form);
+    return Object.fromEntries((state.employeeHandoff.data?.fields || [])
+      .filter((field) => !["instruction", "employee", "location", "signature"].includes(field.type))
+      .map((field) => {
+        if (field.type === "multi_choice") return [field.key, formData.getAll(field.key).map(String)];
+        if (field.type === "boolean") {
+          const value = formData.get(field.key);
+          return [field.key, value === null ? null : value === "true"];
+        }
+        if (field.type === "acknowledgement") return [field.key, formData.get(field.key) === "true"];
+        const value = String(formData.get(field.key) || "").trim();
+        if (field.type === "number") return [field.key, value === "" ? null : Number(value)];
+        return [field.key, value === "" ? null : value];
+      }));
+  }
+
+  async function handleEmployeeHandoffSubmit(form) {
+    const submitButton = form.querySelector('button[type="submit"]');
+    const formData = new FormData(form);
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Submittingâ€¦";
+    }
+    const result = await supabaseClient.rpc("submit_employee_form_handoff", {
+      target_token: employeeHandoffToken,
+      target_answers: collectEmployeeHandoffAnswers(form),
+      target_typed_name: String(formData.get("typed_name") || ""),
+      target_consent_confirmed: formData.get("consent_confirmed") === "on",
+      target_employee_attestation: formData.get("employee_attestation") === "on"
+    });
+    if (result.error) {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Submit completed form";
+      }
+      showToast("Form was not submitted", result.error.message || "The secure form session rejected this response.");
+      return;
+    }
+    state.employeeHandoff.receipt = Array.isArray(result.data) ? result.data[0] : result.data;
+    state.employeeHandoff.status = "complete";
+    render();
+  }
+
   function render() {
+    if (isEmployeeHandoffMode) {
+      app.innerHTML = renderEmployeeHandoffScreen();
+      referencePanelRegion.innerHTML = "";
+      return;
+    }
     localStorage.setItem(`${uiStoragePrefix}view`, state.view === "search" ? "dashboard" : state.view);
     localStorage.setItem(`${uiStoragePrefix}location`, state.locationId);
     if (state.authStatus !== "ready") {
@@ -5041,6 +6029,7 @@
       </div>
       ${renderModal()}
       ${renderProgramDrawer()}
+      ${renderEmployeeDrawer()}
       ${renderProgramFormRunner()}
       ${renderOriginalFormPreview()}
     `;
@@ -5059,8 +6048,10 @@
     state.view = view;
     state.sidebarOpen = false;
     state.modal = null;
+    state.modalContext = {};
     state.referenceId = null;
     state.programDrawerId = null;
+    state.employeeDrawerId = null;
     state.originalPreviewId = null;
     state.activeFormId = null;
     render();
@@ -5070,12 +6061,12 @@
     });
   }
 
-  function openModal(type, relatedId) {
+  function openModal(type, relatedId, context = {}) {
     if (type === "form-upload" && !localUploadStagingEnabled) {
       showToast("Upload service required", "Deploy the private prepare, malware-scan, and commit service before accepting production uploads.");
       return;
     }
-    if (["inspection", "incident", "training", "action"].includes(type) && !data.locations.length) {
+    if (["inspection", "incident", "committee", "training", "training-completion", "action", "employee-form-assignment", "employee-document"].includes(type) && !data.locations.length) {
       showToast("Location access required", "An active authorized location is required for this workflow.");
       return;
     }
@@ -5083,7 +6074,7 @@
       showToast("Read-only auditor role", "Auditors can review authorized records but cannot create operational records.");
       return;
     }
-    if (["training", "action"].includes(type) && !canWriteLocation()) {
+    if (["committee", "training", "training-completion", "action", "employee-form-assignment", "employee-document"].includes(type) && !canWriteLocation()) {
       showToast("Manager access required", "Your role cannot create this record for the selected location.");
       return;
     }
@@ -5103,8 +6094,16 @@
       showToast("Training unavailable", "A published current course version is required.");
       return;
     }
+    if (type === "employee-form-assignment" && !allFormTemplates().some((template) => (
+      formAvailableForSubmission(template)
+      && !(template.fields || []).some((field) => field.databaseType === "file")
+    ))) {
+      showToast("Employee form unavailable", "A published, location-applicable form without file fields is required.");
+      return;
+    }
     state.modal = type;
     state.selectedTemplateId = relatedId || null;
+    state.modalContext = context;
     state.referenceId = null;
     state.originalPreviewId = null;
     render();
@@ -5116,6 +6115,7 @@
   function closeModal() {
     state.modal = null;
     state.selectedTemplateId = null;
+    state.modalContext = {};
     render();
   }
 
@@ -5238,28 +6238,44 @@
       showToast("Training not assigned", "Publish the current course version first.");
       return;
     }
-    const requestedLocationId = String(formData.get("location_id") || "all");
+    const requestedLocationId = String(formData.get("location_id") || "");
     if (!canWriteLocation(requestedLocationId)) {
       showToast("Training not assigned", "Your role cannot assign training for that location.");
       return;
     }
-    const people = requestedLocationId === "all"
-      ? data.people
-      : data.people.filter((person) => person.locationIds?.includes(requestedLocationId));
+    const requestedEmployeeId = String(formData.get("employee_id") || "all");
+    const people = data.people.filter((person) => (
+      person.locationIds?.includes(requestedLocationId)
+      && (requestedEmployeeId === "all" || person.id === requestedEmployeeId)
+    ));
     if (!people.length) {
       showToast("Training not assigned", "No authorized workers match that location.");
       return;
     }
-    const rows = people.map((person) => ({
-      company_id: data.company.id,
-      location_id: requestedLocationId === "all" ? person.locationId : requestedLocationId,
-      course_id: course.id,
-      course_version: course.currentVersion,
-      worker_profile_id: person.id,
-      due_at: new Date(`${formData.get("due_date")}T23:59:59`).toISOString(),
-      assigned_by: state.authUser.id
-    }));
-    const result = await supabaseClient.from("training_assignments").insert(rows);
+    const retentionMonths = Number(formData.get("retention_months") || 0) || null;
+    const regulatoryBasis = String(formData.get("regulatory_basis") || "")
+      .split(/\r?\n/)
+      .map((citation) => citation.trim())
+      .filter(Boolean)
+      .slice(0, 100)
+      .map((citation) => ({
+        citation,
+        traceStatus: "review_required",
+        capturedBy: "manual_assignment_entry"
+      }));
+    const result = await supabaseClient.rpc("assign_training_requirements", {
+      target_employee_ids: people.map((person) => person.id),
+      target_course_id: course.id,
+      target_location_id: requestedLocationId,
+      target_due_at: new Date(`${formData.get("due_date")}T23:59:59`).toISOString(),
+      target_reason: String(formData.get("reason") || "Company safety requirement").trim(),
+      target_cadence_months: Number(formData.get("cadence_months") || 0) || null,
+      target_retention_months: retentionMonths,
+      target_retention_basis: retentionMonths
+        ? { status: "calculated", source: "assignment_policy", months: retentionMonths }
+        : { status: "review_required" },
+      target_regulatory_basis: regulatoryBasis
+    });
     if (result.error) {
       showToast("Training not assigned", result.error.message || "Supabase rejected the assignments.");
       return;
@@ -5285,16 +6301,15 @@
       showToast("Action not created", "Choose an owner who is assigned to that location.");
       return;
     }
-    const result = await supabaseClient.from("corrective_actions").insert({
-      company_id: data.company.id,
-      location_id: locationId,
-      source_type: "direct",
-      title: String(formData.get("title") || "").trim(),
-      priority: String(formData.get("priority") || "medium").toLowerCase(),
-      assigned_to: ownerId,
-      due_at: new Date(`${formData.get("due_date")}T23:59:59`).toISOString(),
-      required_evidence: formData.get("evidence"),
-      created_by: state.authUser.id
+    const result = await supabaseClient.rpc("create_employee_corrective_action", {
+      target_location_id: locationId,
+      target_employee_id: ownerId,
+      target_title: String(formData.get("title") || "").trim(),
+      target_description: String(formData.get("description") || "").trim() || null,
+      target_priority: String(formData.get("priority") || "medium").toLowerCase(),
+      target_due_at: new Date(`${formData.get("due_date")}T23:59:59`).toISOString(),
+      target_required_evidence: String(formData.get("evidence") || "").trim() || null,
+      target_committee_meeting_id: String(formData.get("committee_meeting_id") || "") || null
     });
     if (result.error) {
       showToast("Action not created", result.error.message || "Supabase rejected the corrective action.");
@@ -5304,6 +6319,328 @@
     state.view = "actions";
     await loadAuthenticatedWorkspace(state.authUser);
     showToast("Corrective action created", "The owner will see the private Supabase record in their work queue.");
+  }
+
+  async function handleEmployeeFormAssignmentSubmit(form) {
+    const formData = new FormData(form);
+    const employeeId = String(formData.get("employee_id") || "");
+    const locationId = String(formData.get("location_id") || "");
+    const formTemplateVersionId = String(formData.get("form_template_version_id") || "");
+    const person = data.people.find((item) => item.id === employeeId);
+    const template = allFormTemplates().find((item) =>
+      item.formTemplateVersionId === formTemplateVersionId
+    );
+    if (!person?.locationIds?.includes(locationId) || !canWriteLocation(locationId)) {
+      showToast("Employee form not assigned", "Choose an employee and location you are authorized to manage.");
+      return;
+    }
+    if (!template || !formAvailableForSubmission(template) || !template.locations?.includes(locationId)) {
+      showToast("Employee form not assigned", "Choose a published form with reviewed applicability at this location.");
+      return;
+    }
+    const dueDate = String(formData.get("due_date") || "");
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Assigningâ€¦";
+    }
+    const result = await supabaseClient.rpc("assign_employee_form", {
+      target_employee_id: employeeId,
+      target_location_id: locationId,
+      target_form_template_version_id: formTemplateVersionId,
+      target_due_at: dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null,
+      target_title: String(formData.get("title") || "").trim() || null,
+      target_instructions: String(formData.get("instructions") || "").trim() || null
+    });
+    if (result.error) {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Assign form";
+      }
+      showToast("Employee form not assigned", result.error.message || "Supabase rejected the assignment.");
+      return;
+    }
+    state.modal = null;
+    state.modalContext = {};
+    state.employeeDrawerId = employeeId;
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast("Employee form assigned", `${template.title} now appears as not done for ${person.name}.`);
+  }
+
+  async function startEmployeeFormHandoff(assignmentId) {
+    const assignment = data.employeeFormAssignments.find((item) => item.id === assignmentId);
+    if (!assignment || !["assigned", "in_progress"].includes(assignment.rawStatus)) {
+      showToast("Tablet form unavailable", "This employee form is no longer open.");
+      return;
+    }
+    const handoffWindow = window.open("about:blank", "_blank");
+    if (handoffWindow) {
+      handoffWindow.opener = null;
+      handoffWindow.document.title = "Opening secure employee form";
+      handoffWindow.document.body.textContent = "Opening the secure SafetyOps employee formâ€¦";
+    }
+    const result = await supabaseClient.rpc("begin_employee_form_handoff", {
+      target_assignment_id: assignment.id
+    });
+    if (result.error) {
+      handoffWindow?.close();
+      showToast("Tablet form not started", result.error.message || "Supabase could not create the one-time handoff.");
+      return;
+    }
+    const ceremony = Array.isArray(result.data) ? result.data[0] : result.data;
+    if (!/^[0-9a-f]{64}$/.test(ceremony?.handoff_token || "")) {
+      handoffWindow?.close();
+      showToast("Tablet form not started", "The secure handoff service returned an invalid capability.");
+      return;
+    }
+    if (!handoffWindow) {
+      showToast("Pop-up blocked", "Allow pop-ups for SafetyOps, then select Start tablet form again. The unused session will be revoked automatically.");
+      return;
+    }
+    const handoffUrl = new URL(window.location.href);
+    handoffUrl.hash = `handoff=${ceremony.handoff_token}`;
+    handoffWindow.location.replace(handoffUrl.href);
+    showToast("Tablet form opened", `${assignment.employee}'s one-time form is isolated in a new tab and expires in 15 minutes.`);
+  }
+
+  async function handleCommitteeSubmit(form) {
+    const formData = new FormData(form);
+    const locationId = String(formData.get("location_id") || "");
+    if (!canWriteLocation(locationId)) {
+      showToast("Meeting notes not saved", "Your role cannot manage this location.");
+      return;
+    }
+    const attendeeIds = formData.getAll("attendee_ids").map(String).filter(Boolean);
+    const result = await supabaseClient.rpc("create_safety_committee_meeting", {
+      target_location_id: locationId,
+      target_title: String(formData.get("title") || "").trim(),
+      target_meeting_date: String(formData.get("meeting_date") || ""),
+      target_chair_employee_id: String(formData.get("chair_employee_id") || ""),
+      target_attendee_ids: attendeeIds,
+      target_agenda: String(formData.get("agenda") || "").trim() || null,
+      target_notes: String(formData.get("notes") || "").trim(),
+      target_decisions: String(formData.get("decisions") || "").trim() || null,
+      target_next_meeting_at: null
+    });
+    if (result.error) {
+      showToast("Meeting notes not saved", result.error.message || "Supabase rejected the meeting record.");
+      return;
+    }
+    state.modal = null;
+    state.modalContext = {};
+    state.view = "committee";
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast("Committee notes saved", "Attendance, notes, and decisions are now in the draft meeting record.");
+  }
+
+  async function finalizeCommitteeMeeting(meetingId) {
+    const result = await supabaseClient.rpc("finalize_safety_committee_meeting", {
+      target_meeting_id: meetingId
+    });
+    if (result.error) {
+      showToast("Minutes not finalized", result.error.message || "Supabase could not freeze these minutes.");
+      return;
+    }
+    await loadAuthenticatedWorkspace(state.authUser);
+    const receipt = Array.isArray(result.data) ? result.data[0] : result.data;
+    showToast("Committee minutes finalized", `Immutable minutes SHA-256: ${String(receipt?.minutes_sha256 || "").slice(0, 16)}â€¦`);
+  }
+
+  async function handleEmployeeSubmit(form) {
+    const formData = new FormData(form);
+    const locationId = String(formData.get("location_id") || "");
+    const result = await supabaseClient.rpc("create_employee", {
+      employee_full_name: String(formData.get("full_name") || "").trim(),
+      employee_location_id: locationId,
+      employee_number: String(formData.get("employee_number") || "").trim() || null,
+      employee_work_email: String(formData.get("work_email") || "").trim().toLowerCase() || null,
+      employee_job_title: String(formData.get("job_title") || "").trim() || null,
+      employee_department: String(formData.get("department") || "").trim() || null
+    });
+    if (result.error) {
+      showToast("Employee not added", result.error.message || "Supabase rejected the employee record.");
+      return;
+    }
+    state.modal = null;
+    state.modalContext = {};
+    state.employeeDrawerId = result.data;
+    state.view = "people";
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast("Employee added", "The employee can now receive training, tablet forms, and signed records without a login account.");
+  }
+
+  async function handleTrainingCompletionSubmit(form) {
+    const formData = new FormData(form);
+    const completedDate = String(formData.get("completed_date") || "");
+    const result = await supabaseClient.rpc("record_training_completion", {
+      target_assignment_id: String(formData.get("assignment_id") || ""),
+      target_completed_at: new Date(`${completedDate}T12:00:00`).toISOString(),
+      target_completion_method: String(formData.get("completion_method") || ""),
+      target_quiz_score: String(formData.get("quiz_score") || "").trim() === ""
+        ? null
+        : Number(formData.get("quiz_score")),
+      target_instructor_name: String(formData.get("instructor_name") || "").trim() || null
+    });
+    if (result.error) {
+      showToast("Completion not recorded", result.error.message || "Supabase rejected the completion evidence.");
+      return;
+    }
+    state.modal = null;
+    state.modalContext = {};
+    await loadAuthenticatedWorkspace(state.authUser);
+    showToast("Training completion retained", "The employee, pinned course version, verifier, renewal, retention, and evidence hash were recorded.");
+  }
+
+  async function handleEmployeeDocumentSubmit(form) {
+    const formData = new FormData(form);
+    const file = formData.get("file");
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (!(file instanceof File) || !file.name || !file.size || file.size > 10 * 1024 * 1024) {
+      showToast("PDF not uploaded", "Choose a non-empty PDF no larger than 10 MB.");
+      return;
+    }
+    const prefix = new TextDecoder("ascii").decode(new Uint8Array(await file.slice(0, 5).arrayBuffer()));
+    if (!file.name.toLowerCase().endsWith(".pdf") || prefix !== "%PDF-") {
+      showToast("PDF not uploaded", "The selected file does not have a valid PDF header and filename.");
+      return;
+    }
+    if (!supabaseClient.functions?.invoke) {
+      showToast("PDF not uploaded", "The private employee document authority is not deployed.");
+      return;
+    }
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Preparing secure uploadâ€¦";
+    }
+    try {
+      const retentionMonths = Number(formData.get("retention_months") || 0) || null;
+      const dueDate = String(formData.get("signature_due_date") || "");
+      const prepareResult = await supabaseClient.functions.invoke("employee-document-file", {
+        body: {
+          action: "prepare",
+          employee_id: String(formData.get("employee_id") || ""),
+          location_id: String(formData.get("location_id") || ""),
+          document_kind: String(formData.get("document_kind") || ""),
+          title: String(formData.get("title") || "").trim(),
+          filename: file.name,
+          size_bytes: file.size,
+          document_date: String(formData.get("document_date") || ""),
+          signature_due_at: dueDate ? new Date(`${dueDate}T23:59:59`).toISOString() : null,
+          signature_intent: String(formData.get("signature_intent") || "").trim() || null,
+          retention_months: retentionMonths,
+          retention_basis: retentionMonths
+            ? { status: "calculated", source: "document_policy", months: retentionMonths }
+            : { status: "review_required" },
+          employee_can_view: true,
+          manager_visibility: "safety_admin_only",
+          idempotency_key: window.crypto.randomUUID()
+        }
+      });
+      if (prepareResult.error || !prepareResult.data?.upload_token) {
+        throw prepareResult.error || new Error("The upload could not be authorized.");
+      }
+      if (submitButton) submitButton.textContent = "Uploading exact PDFâ€¦";
+      const prepared = prepareResult.data;
+      const uploadResult = await supabaseClient.storage
+        .from(prepared.bucket_id)
+        .uploadToSignedUrl(prepared.object_path, prepared.upload_token, file, {
+          contentType: "application/pdf"
+        });
+      if (uploadResult.error) throw uploadResult.error;
+      if (submitButton) submitButton.textContent = "Verifying SHA-256â€¦";
+      const completeResult = await supabaseClient.functions.invoke("employee-document-file", {
+        body: { action: "complete", upload_session_id: prepared.upload_session_id }
+      });
+      if (completeResult.error || !completeResult.data?.employee_document_id) {
+        throw completeResult.error || new Error("The uploaded PDF could not be verified.");
+      }
+      state.modal = null;
+      state.modalContext = {};
+      state.employeeDrawerId = String(formData.get("employee_id") || "");
+      await loadAuthenticatedWorkspace(state.authUser);
+      if (completeResult.data.malware_scan_status === "clean") {
+        showToast(
+          "PDF verified and released",
+          "The exact bytes passed format, SHA-256, and configured malware-scan verification."
+        );
+      } else {
+        showToast(
+          "PDF quarantined for security review",
+          "The exact bytes, size, and SHA-256 were verified. Download and signing stay blocked until a malware scanner attests these bytes as clean."
+        );
+      }
+    } catch (error) {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = "Prepare secure upload";
+      }
+      showToast("PDF not uploaded", error?.message || "The secure upload workflow failed.");
+    }
+  }
+
+  async function handleEmployeeSignSubmit(form) {
+    const formData = new FormData(form);
+    const result = await supabaseClient.rpc("sign_employee_document", {
+      target_employee_document_id: String(formData.get("employee_document_id") || ""),
+      typed_name: String(formData.get("typed_name") || ""),
+      consent_confirmed: formData.get("consent_confirmed") === "on",
+      facilitator_confirmed: formData.get("facilitator_confirmed") === "on"
+    });
+    if (result.error) {
+      showToast("Acknowledgement not completed", result.error.message || "Supabase rejected the signature evidence.");
+      return;
+    }
+    state.modal = null;
+    state.modalContext = {};
+    await loadAuthenticatedWorkspace(state.authUser);
+    const receipt = Array.isArray(result.data) ? result.data[0] : result.data;
+    showToast("Employee acknowledgement retained", `Signature SHA-256: ${String(receipt?.signature_sha256 || "").slice(0, 16)}â€¦`);
+  }
+
+  async function downloadEmployeeDocument(documentId) {
+    try {
+      const result = await supabaseClient.functions.invoke("employee-document-file", {
+        body: { action: "download", employee_document_id: documentId }
+      });
+      if (result.error || !result.data?.signed_url) throw result.error || new Error("Download authorization failed.");
+      const url = new URL(result.data.signed_url);
+      if (url.protocol !== "https:" || url.hostname !== new URL(window.SAFETYOPS_SUPABASE_URL).hostname) {
+        throw new Error("The download authority returned an invalid URL.");
+      }
+      const link = document.createElement("a");
+      link.href = url.href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.click();
+      showToast("Private PDF opened", "A five-minute, audited download URL was issued.");
+    } catch (error) {
+      showToast("PDF unavailable", error?.message || "The private file could not be opened.");
+    }
+  }
+
+  async function retryEmployeeDocumentScan(documentId) {
+    const documentRecord = data.employeeDocuments.find((item) => item.id === documentId);
+    if (!documentRecord || !canWriteLocation(documentRecord.locationId)) {
+      showToast("Security scan unavailable", "Your role cannot rescan this employee document.");
+      return;
+    }
+    try {
+      const result = await supabaseClient.functions.invoke("employee-document-file", {
+        body: { action: "scan", employee_document_id: documentId }
+      });
+      if (result.error || !result.data?.employee_document_id) {
+        throw result.error || new Error(result.data?.error || "The malware scanner is not configured.");
+      }
+      await loadAuthenticatedWorkspace(state.authUser);
+      showToast(
+        result.data.malware_scan_status === "clean" ? "PDF security scan passed" : "PDF security scan rejected",
+        result.data.malware_scan_status === "clean"
+          ? "The exact stored SHA-256 is now available for the authorized signing or download workflow."
+          : "The document remains blocked and cannot be signed or downloaded."
+      );
+    } catch (error) {
+      showToast("Security scan unavailable", error?.message || "The configured malware scanner could not complete the scan.");
+    }
   }
 
   async function handleDocumentAcknowledgement(documentId) {
@@ -5774,6 +7111,11 @@
     if (!target) return;
     const action = target.dataset.action;
 
+    if (action === "close-handoff-window") {
+      window.close();
+      return;
+    }
+
     if (action === "auth-mode") {
       const requestedMode = target.dataset.mode;
       state.authMode = requestedMode === "recovery"
@@ -5998,7 +7340,60 @@
     }
 
     if (action === "open-modal") {
-      openModal(target.dataset.modal, target.dataset.templateId || target.dataset.courseId);
+      state.employeeDrawerId = null;
+      openModal(
+        target.dataset.modal,
+        target.dataset.templateId || target.dataset.courseId,
+        { ...target.dataset }
+      );
+      return;
+    }
+
+    if (action === "open-employee") {
+      state.employeeDrawerId = target.dataset.employeeId;
+      render();
+      requestAnimationFrame(() => document.querySelector(".employee-record-drawer .icon-button")?.focus());
+      return;
+    }
+
+    if (action === "close-employee") {
+      state.employeeDrawerId = null;
+      render();
+      return;
+    }
+
+    if (action === "backdrop-close-employee" && event.target === target) {
+      state.employeeDrawerId = null;
+      render();
+      return;
+    }
+
+    if (action === "start-employee-form-handoff") {
+      startEmployeeFormHandoff(target.dataset.assignmentId);
+      return;
+    }
+
+    if (action === "open-employee-sign") {
+      state.modal = "employee-sign";
+      state.modalContext = { documentId: target.dataset.documentId };
+      state.employeeDrawerId = null;
+      render();
+      requestAnimationFrame(() => document.querySelector("#employee-sign-form input")?.focus());
+      return;
+    }
+
+    if (action === "download-employee-document") {
+      downloadEmployeeDocument(target.dataset.documentId);
+      return;
+    }
+
+    if (action === "retry-employee-document-scan") {
+      retryEmployeeDocumentScan(target.dataset.documentId);
+      return;
+    }
+
+    if (action === "finalize-committee") {
+      finalizeCommitteeMeeting(target.dataset.meetingId);
       return;
     }
 
@@ -6038,6 +7433,42 @@
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.id === "employee-form-location") {
+      const locationId = event.target.value;
+      const people = data.people.filter((person) =>
+        person.locationIds?.includes(locationId) && person.employmentStatus !== "Separated"
+      );
+      const templates = allFormTemplates().filter((template) => (
+        formAvailableForSubmission(template)
+        && template.locations?.includes(locationId)
+        && !(template.fields || []).some((field) => field.databaseType === "file")
+      ));
+      const employeeSelect = document.querySelector("#employee-form-employee");
+      const templateSelect = document.querySelector("#employee-form-template");
+      const submitButton = document.querySelector('#employee-form-assignment-form button[type="submit"]');
+      if (employeeSelect) employeeSelect.innerHTML = people.map((person) => `<option value="${person.id}">${escapeHtml(person.name)}</option>`).join("") || `<option value="">No employees at this location</option>`;
+      if (templateSelect) templateSelect.innerHTML = templates.map((template) => `<option value="${template.formTemplateVersionId}">${escapeHtml(template.title)} Â· ${escapeHtml(template.version)}</option>`).join("") || `<option value="">No eligible published forms</option>`;
+      if (submitButton) submitButton.disabled = !people.length || !templates.length;
+      return;
+    }
+    if (event.target.id === "training-location") {
+      const people = data.people.filter((person) =>
+        person.locationIds?.includes(event.target.value) && person.employmentStatus !== "Separated"
+      );
+      const employeeSelect = document.querySelector("#training-employee");
+      if (employeeSelect) employeeSelect.innerHTML = `<option value="all">All employees at this location</option>${people.map((person) => `<option value="${person.id}">${escapeHtml(person.name)}</option>`).join("")}`;
+      return;
+    }
+    if (event.target.id === "employee-document-location") {
+      const people = data.people.filter((person) =>
+        person.locationIds?.includes(event.target.value) && person.employmentStatus !== "Separated"
+      );
+      const employeeSelect = document.querySelector("#employee-document-employee");
+      const submitButton = document.querySelector('#employee-document-form button[type="submit"]');
+      if (employeeSelect) employeeSelect.innerHTML = people.map((person) => `<option value="${person.id}">${escapeHtml(person.name)}</option>`).join("") || `<option value="">No employees at this location</option>`;
+      if (submitButton) submitButton.disabled = !people.length;
+      return;
+    }
     if (event.target.id === "location-create-state") {
       const timezoneSelect = document.querySelector("#location-create-timezone");
       const boiseOption = timezoneSelect?.querySelector('option[value="America/Boise"]');
@@ -6098,6 +7529,11 @@
   });
 
   document.addEventListener("submit", (event) => {
+    if (event.target.id === "employee-handoff-form") {
+      event.preventDefault();
+      handleEmployeeHandoffSubmit(event.target);
+      return;
+    }
     if (event.target.id === "auth-signin-form" || event.target.id === "auth-signup-form") {
       event.preventDefault();
       handleAuthSubmit(event.target);
@@ -6181,9 +7617,46 @@
       return;
     }
 
+    if (event.target.id === "committee-form") {
+      event.preventDefault();
+      handleCommitteeSubmit(event.target);
+      return;
+    }
+
+    if (event.target.id === "employee-form") {
+      event.preventDefault();
+      handleEmployeeSubmit(event.target);
+      return;
+    }
+
+    if (event.target.id === "training-completion-form") {
+      event.preventDefault();
+      handleTrainingCompletionSubmit(event.target);
+      return;
+    }
+
+    if (event.target.id === "employee-form-assignment-form") {
+      event.preventDefault();
+      handleEmployeeFormAssignmentSubmit(event.target);
+      return;
+    }
+
+    if (event.target.id === "employee-document-form") {
+      event.preventDefault();
+      handleEmployeeDocumentSubmit(event.target);
+      return;
+    }
+
+    if (event.target.id === "employee-sign-form") {
+      event.preventDefault();
+      handleEmployeeSignSubmit(event.target);
+      return;
+    }
+
     if (event.target.id === "action-form") {
       event.preventDefault();
       handleActionSubmit(event.target);
+      return;
     }
   });
 
@@ -6207,15 +7680,28 @@
       render();
       return;
     }
+    if (event.key === "Escape" && state.employeeDrawerId) {
+      state.employeeDrawerId = null;
+      render();
+      return;
+    }
     if (event.key === "Escape" && state.modal) closeModal();
-    if (event.key === "/" && !state.modal && !state.referenceId && !state.originalPreviewId && !state.activeFormId && !state.programDrawerId && document.activeElement?.tagName !== "INPUT") {
+    if (event.key === "/" && !state.modal && !state.referenceId && !state.originalPreviewId && !state.activeFormId && !state.programDrawerId && !state.employeeDrawerId && document.activeElement?.tagName !== "INPUT") {
       event.preventDefault();
       document.querySelector("#global-search")?.focus();
     }
   });
 
+  window.addEventListener("focus", () => {
+    if (!isEmployeeHandoffMode && state.authStatus === "ready" && state.authUser) {
+      loadAuthenticatedWorkspace(state.authUser);
+    }
+  });
+
   render();
-  if (supabaseClient) {
+  if (supabaseClient && isEmployeeHandoffMode) {
+    loadEmployeeHandoff();
+  } else if (supabaseClient) {
     initializeAuth();
   } else if (localUploadStagingEnabled) {
     hydrateLocalFormUploads();

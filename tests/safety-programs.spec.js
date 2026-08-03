@@ -60,7 +60,9 @@ test("a program form submits without caller-authored evidence hashes", async ({ 
   await card.getByRole("button", { name: "Start form" }).click();
 
   await page.getByLabel("Employee name *").fill("Test Worker");
-  await page.getByText("I acknowledge this statement", { exact: true }).click();
+  const acknowledgement = page.getByLabel("I acknowledge this statement");
+  await acknowledgement.locator("..").click();
+  await expect(acknowledgement).toBeChecked();
   await page.getByLabel("Worker signature *").fill("Test Worker");
   await page.getByRole("button", { name: "Sign & submit" }).click();
 

@@ -11,8 +11,10 @@ flowchart LR
   A["GitHub Pages: public shell and reference catalogs"] --> B["Browser app"]
   B --> C["Supabase Auth"]
   B --> D["Data API and RPCs"]
-  B --> E["Edge Function: sign-form-file"]
+  B --> E["Edge Functions: controlled file services"]
+  B --> I["Anonymous one-time employee handoff"]
   D --> F["PostgreSQL with RLS"]
+  I --> D
   E --> F
   E --> G["Private Supabase Storage"]
   H["Future source ingestion and monitoring"] -. "not deployed" .-> F
@@ -20,11 +22,12 @@ flowchart LR
 ```
 
 This is the target architecture represented by source. The public shell has an
-exact signed release process. The hosted migration ledger is aligned through
-`012`, and `010` through `012` compiled and applied in the final compatibility
-sequence on 2026-07-31. That ledger does not prove historical file checksums.
-Catalog, cross-role, tenant-isolation, Storage, Edge Function, and full workflow
-behavior remain separately unproven.
+exact signed release process. Migration `016` passed a hosted rollback compile,
+was applied on 2026-08-03, and has a ledger entry bound to the reviewed source
+SHA-256. Named live catalog, RLS, and anonymous-grant checks passed, and the
+employee-document Edge Function is active with JWT verification. That evidence
+does not prove historical migration checksums, the full cross-role and
+tenant-isolation matrix, configured scanner behavior, or complete workflows.
 
 ## Public layer
 
@@ -79,6 +82,14 @@ corrective-action, and draft-form writes use RLS-filtered Data API paths. These
 browser paths depend on database-side authorization; hidden controls are not
 treated as the security boundary (LFES-SEC-002).
 
+The employee tablet path is intentionally different. An authenticated safety
+user creates an assignment and requests a 15-minute one-time capability. A
+separate no-opener tab uses the public key and capability but receives no
+facilitator Auth session. PostgreSQL stores only the token's SHA-256 digest,
+validates answers against the pinned published form, atomically consumes the
+handoff, and creates append-only completion evidence. Employees do not need
+accounts. See `employee-safety-workflows.md`.
+
 Workspace reads now have explicit collection caps, generally 30 to 1,000 rows.
 They are bounded first loads, not pagination: deterministic cursors/ranges,
 truncation indicators, and detail-on-demand remain required before scale.
@@ -131,13 +142,25 @@ Migrations must be applied in filename order:
 12. `202607310012_pgcrypto_schema_compatibility.sql`: hosted-Supabase pgcrypto
     namespace compatibility and original-search-path-preserving repair for
     hash-dependent functions installed by migrations `002` through `009`.
+13. `202607310013_drive_form_archive.sql`: two-phase private Drive-export
+    archive ingestion, immutable source/candidate provenance, and access
+    ledgers.
+14. `202607310014_candidate_download_review_guard.sql`: candidate download
+    denial for rejected, duplicate, and superseded review states.
+15. `202607310015_drive_ingest_invalidation_ledger.sql`: append-only ingest-run
+    invalidation without rewriting frozen ingest evidence.
+16. `202608030016_employee_safety_workflows.sql`: employee directory and exact
+    location assignments, committee minutes, employee-owned actions and
+    training, employee PDF evidence, and 15-minute one-time employee form
+    handoffs with immutable submission hashes.
 
 The critical intended boundaries are `private.is_company_member`,
 `private.can_manage_company`, `private.can_access_location`, RLS policies,
 foreign keys that repeat `company_id`, and pinned `search_path` values on
-security-definer functions. Hosted version-ledger alignment and the final
-`010`–`012` compatibility application are proven; exact legacy file identity
-and the complete runtime role and tenant-denial matrix are not.
+security-definer functions. Hosted application and ledger evidence for
+migration `016`, plus the final `010`–`012` compatibility sequence, are proven;
+exact legacy file identity and the complete runtime role and tenant-denial
+matrix are not.
 
 ## Private file boundary
 
@@ -150,9 +173,13 @@ The intended original-form download path is:
 4. only clean, verified bytes receive a five-minute signed URL; and
 5. the service writes an allow/deny access event.
 
-The function exists in source but is not proven deployed. There is no live
-prepare, quarantine, malware-scan, or immutable upload/attachment commit
-pipeline. Production controls therefore keep upload actions disabled; optional
+The form-original download function and separate employee-PDF function are
+active with JWT verification, but authorized hosted Storage behavior is not yet
+proven. There is no live prepare/quarantine/scan/commit upload pipeline for form
+originals. The employee-PDF service uses fenced resumable processing leases,
+format/size/hash checks, quarantine, and exact-hash scanner attestations. With
+no approved scanner configured, the document remains non-releasable as
+`upload_pending`/`unavailable`; download and signing require `clean`. Optional
 localhost staging is device-local development state, not company evidence.
 
 ## Regulatory traceability
@@ -175,12 +202,15 @@ layer is an LFES or regulatory compliance certification.
 - no clean local PostgreSQL replay, applied-file checksum proof for legacy
   versions, or hosted catalog assertion suite;
 - no hosted cross-company, cross-location, or role denial tests;
-- no deployed Edge Function, source ingestion, malware scanner, scheduler, or
+- no configured malware scanner, source-ingestion worker, scheduler, or
   change-monitoring worker;
 - bounded query caps without user-visible pagination or truncation handling;
 - no offline mutation/conflict design;
 - no database backup, rollback, or forward-correction runbook;
-- no live prepare/quarantine/malware/commit upload service;
+- no live form-original prepare/quarantine/malware/commit upload service;
+- no malware scanner, PDF template/version lineage, retention/legal-hold
+  decision workflow, recurring-training renewal worker, or server-owned
+  corrective-action closeout;
 - possible legacy IndexedDB staging blobs on devices used by earlier builds;
 - concentrated browser responsibilities in `app.js`.
 
