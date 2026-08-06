@@ -131,6 +131,13 @@ function seedTables() {
       version: 1,
       state_code: location.stateCode,
       employer_type: "other",
+      naics_codes: [],
+      operation_facts: {
+        employer_type_confirmed: false,
+        industry_and_naics_confirmed: false,
+        retained_federal_jurisdiction_reviewed: false
+      },
+      hazard_facts: { review_required: true },
       status: "draft",
       prepared_by: AUTH_USER.id,
       created_at: createdAt,
