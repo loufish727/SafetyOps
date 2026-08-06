@@ -174,35 +174,35 @@
 
   const navGroups = [
     {
-      label: "Overview",
+      label: "Today",
       items: [
-        { id: "dashboard", label: "Command center", icon: "01" },
-        { id: "my-work", label: "My work", icon: "✓" }
+        { id: "dashboard", label: "Today", icon: "01" },
+        { id: "my-work", label: "Safety monitor", icon: "✓" }
       ]
     },
     {
-      label: "Safety operations",
+      label: "Run safety",
       items: [
-        { id: "inspections", label: "Forms & inspections", icon: "F" },
-        { id: "committee", label: "Safety committee", icon: "C" },
+        { id: "inspections", label: "Forms", icon: "F" },
+        { id: "committee", label: "Committee", icon: "C" },
         { id: "training", label: "Training", icon: "T" },
         { id: "incidents", label: "Incidents", icon: "!", danger: true },
-        { id: "actions", label: "Corrective actions", icon: "A" }
+        { id: "actions", label: "Action items", icon: "A" }
       ]
     },
     {
-      label: "Compliance",
+      label: "Library & compliance",
       items: [
-        { id: "programs", label: "Safety programs", icon: "P" },
-        { id: "standards", label: "OSHA reference", icon: "§" },
-        { id: "documents", label: "Controlled documents", icon: "D" },
-        { id: "people", label: "People & credentials", icon: "P" },
-        { id: "locations", label: "Locations", icon: "L" }
+        { id: "programs", label: "Forms & programs", icon: "P" },
+        { id: "documents", label: "Documents", icon: "D" },
+        { id: "standards", label: "OSHA guide", icon: "§" }
       ]
     },
     {
-      label: "Workspace",
+      label: "Company",
       items: [
+        { id: "people", label: "Employees", icon: "E" },
+        { id: "locations", label: "Locations", icon: "L" },
         { id: "settings", label: "Settings", icon: "S" }
       ]
     }
@@ -210,14 +210,14 @@
 
   const pageMeta = {
     dashboard: {
-      eyebrow: "All-location overview",
-      title: "Safety command center",
-      description: "See what needs attention across training, inspections, incidents, and controlled documents."
+      eyebrow: "All-location workday",
+      title: "Today",
+      description: "Start the work, clear what is overdue, and see what your safety program needs next."
     },
     "my-work": {
-      eyebrow: "Personal queue",
-      title: "My work",
-      description: "One ordered list of the assignments, reviews, and follow-ups that need your attention."
+      eyebrow: "Company work inbox",
+      title: "Safety monitor",
+      description: "Track scheduled work, employee signatures, follow-ups, and completed records in one place."
     },
     inspections: {
       eyebrow: "Field assurance",
@@ -241,18 +241,18 @@
     },
     actions: {
       eyebrow: "Close the loop",
-      title: "Corrective actions",
+      title: "Action items",
       description: "Keep findings from inspections, hazards, and incidents visible until evidence is reviewed and accepted."
     },
     documents: {
       eyebrow: "Controlled library",
-      title: "Documents",
+      title: "Company documents",
       description: "Publish the right version, target the right locations, and prove that required workers acknowledged it."
     },
     programs: {
-      eyebrow: "Private source library",
-      title: "Safety programs & forms",
-      description: "Use the company program library, complete digital forms, assign acknowledgements, and trace every record back to its source."
+      eyebrow: "Reusable safety content",
+      title: "Forms & program library",
+      description: "Find ready-to-use forms and programs first, with imports and source originals kept in their own review area."
     },
     standards: {
       eyebrow: "Regulatory library",
@@ -261,7 +261,7 @@
     },
     people: {
       eyebrow: "Workforce compliance",
-      title: "People & credentials",
+      title: "Employees & credentials",
       description: "Connect each worker’s location access, training, certifications, and role in one readiness record."
     },
     locations: {
@@ -1497,6 +1497,7 @@
           score: inspection.score === null ? null : Number(inspection.score),
           status: readableStatus(inspection.status),
           due: formatShortDate(inspection.scheduled_for || inspection.submitted_at || inspection.created_at),
+          submittedAt: inspection.submitted_at,
           findings,
           regulatorySnapshot: inspection.responses?.regulatorySnapshot || null,
           regulatoryTraceStatus: regulatoryContext?.trace_status
@@ -2078,6 +2079,7 @@
         title: assignment.title,
         instructions: assignment.instructions,
         status: readableStatus(assignment.status),
+        dueAt: assignment.due_at,
         due: formatShortDate(assignment.due_at),
         assignedAt: assignment.assigned_at,
         completedAt: assignment.completed_at
@@ -2108,10 +2110,12 @@
             title: action.title,
             locationId: action.locationId,
             owner: action.owner,
+            dueAt: action.dueAt,
             due: action.due,
             priority: action.priority,
             progress: 0,
-            status: action.status
+            status: action.status,
+            targetView: "actions"
           })),
         ...data.trainingAssignments
           .filter((assignment) => !["Complete", "Completed", "Waived"].includes(assignment.status))
@@ -2121,10 +2125,12 @@
             title: assignment.course,
             locationId: assignment.locationId,
             owner: assignment.employee,
+            dueAt: assignment.dueAt,
             due: assignment.due,
             priority: "Medium",
             progress: assignment.status === "In Progress" ? 50 : 0,
-            status: assignment.status
+            status: assignment.status,
+            targetView: "training"
           })),
         ...data.employeeFormAssignments
           .filter((assignment) => ["assigned", "in_progress"].includes(assignment.rawStatus))
@@ -2134,10 +2140,12 @@
             title: assignment.title,
             locationId: assignment.locationId,
             owner: assignment.employee,
+            dueAt: assignment.dueAt,
             due: assignment.due,
             priority: assignment.status === "Overdue" ? "High" : "Medium",
             progress: assignment.rawStatus === "in_progress" ? 25 : 0,
             status: assignment.status,
+            targetView: "people",
             employeeFormAssignmentId: assignment.id
           })),
         ...data.employeeDocuments
@@ -2148,10 +2156,12 @@
             title: documentRecord.title,
             locationId: documentRecord.locationId,
             owner: documentRecord.employee,
+            dueAt: documentRecord.signatureDueAt,
             due: documentRecord.signatureDue,
             priority: "High",
             progress: 0,
             status: "Awaiting signature",
+            targetView: "people",
             employeeDocumentId: documentRecord.id
           })),
         ...data.programAssignments
@@ -2167,10 +2177,12 @@
             title: assignment.title,
             locationId: assignment.locationId,
             owner: assignment.assignee,
+            dueAt: assignment.dueAt,
             due: assignment.due,
             priority: "Medium",
             progress: assignment.status === "In Progress" ? 50 : 0,
-            status: assignment.status
+            status: assignment.status,
+            targetView: "programs"
           }))
       ];
 
@@ -2755,7 +2767,7 @@
           <div class="brand-mark" aria-hidden="true">SO</div>
           <div>
             <p class="brand-name">SafetyOps</p>
-            <p class="brand-subtitle">Safety command</p>
+            <p class="brand-subtitle">Safety work center</p>
           </div>
         </div>
         <div class="workspace-card">
@@ -2819,10 +2831,10 @@
   function renderMobileNav() {
     const items = [
       { id: "dashboard", label: "Today", icon: "⌂" },
-      { id: "inspections", label: "Inspect", icon: "F" },
+      { id: "inspections", label: "Forms", icon: "F" },
       { id: "training", label: "Train", icon: "T" },
-      { id: "standards", label: "Guide", icon: "§" },
-      { id: "my-work", label: "My work", icon: "✓" }
+      { id: "programs", label: "Library", icon: "P" },
+      { id: "my-work", label: "Monitor", icon: "✓" }
     ];
     return `
       <nav class="mobile-nav" aria-label="Mobile navigation">
@@ -2847,7 +2859,8 @@
     const hasStartableTemplate = data.inspectionTemplates.some((template) =>
       template.published && template.currentVersionId && template.questions > 0
     );
-    if (view === "dashboard" || view === "my-work") {
+    if (view === "dashboard") return "";
+    if (view === "my-work") {
       return `
         <button class="button" type="button" ${canReport ? "" : "disabled"} data-action="open-modal" data-modal="incident">Report incident</button>
         <button class="button primary" type="button" ${canReport && hasStartableTemplate ? "" : "disabled"} data-action="open-modal" data-modal="inspection">Start inspection</button>
@@ -2992,6 +3005,299 @@
     return map[type] || "•";
   }
 
+  function calendarDay(value) {
+    if (!value) return "";
+    const raw = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function taskDueBucket(task) {
+    if (["Overdue", "Missed"].includes(task.status)) return "overdue";
+    const dueDay = calendarDay(task.dueAt);
+    if (!dueDay) return "open";
+    const today = calendarDay(new Date());
+    if (dueDay < today) return "overdue";
+    if (dueDay === today) return "today";
+    return "upcoming";
+  }
+
+  function orderedTasks(tasks) {
+    const bucketRank = { overdue: 0, today: 1, open: 2, upcoming: 3 };
+    const priorityRank = { Critical: 0, High: 1, Medium: 2, Low: 3 };
+    return [...tasks].sort((left, right) => {
+      const bucketDifference = bucketRank[taskDueBucket(left)] - bucketRank[taskDueBucket(right)];
+      if (bucketDifference) return bucketDifference;
+      const priorityDifference = (priorityRank[left.priority] ?? 4) - (priorityRank[right.priority] ?? 4);
+      if (priorityDifference) return priorityDifference;
+      const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+      if (leftDue !== rightDue) return leftDue - rightDue;
+      return String(left.title).localeCompare(String(right.title));
+    });
+  }
+
+  function completedWorkRecords() {
+    const formTitle = (formTemplateVersionId, fallback = "Company form") => (
+      allFormTemplates().find((template) => (
+        template.formTemplateVersionId === formTemplateVersionId
+        || template.currentVersionId === formTemplateVersionId
+      ))?.title || fallback
+    );
+    const rows = [
+      ...(data.inspections || [])
+        .filter((inspection) => inspection.submittedAt)
+        .map((inspection) => ({
+          id: `record-inspection-${inspection.id}`,
+          type: "Inspection",
+          title: inspection.template,
+          locationId: inspection.locationId,
+          owner: inspection.assignee,
+          completedAt: inspection.submittedAt,
+          status: inspection.status
+        })),
+      ...(data.programSubmissions || [])
+        .filter((submission) => submission.submittedAt)
+        .map((submission) => ({
+          id: `record-program-${submission.id}`,
+          type: "Company form",
+          title: formTitle(submission.formTemplateVersionId),
+          locationId: submission.locationId,
+          owner: submission.submittedBy,
+          completedAt: submission.submittedAt,
+          status: submission.status
+        })),
+      ...(data.employeeFormSubmissions || [])
+        .filter((submission) => submission.submittedAt)
+        .map((submission) => ({
+          id: `record-employee-form-${submission.id}`,
+          type: "Employee form",
+          title: formTitle(submission.formTemplateVersionId, "Employee form"),
+          locationId: submission.locationId,
+          owner: submission.employeeName,
+          completedAt: submission.submittedAt,
+          status: "Completed"
+        })),
+      ...(data.employeeDocuments || [])
+        .filter((documentRecord) => documentRecord.signedAt)
+        .map((documentRecord) => ({
+          id: `record-employee-document-${documentRecord.id}`,
+          type: "Signed document",
+          title: documentRecord.title,
+          locationId: documentRecord.locationId,
+          owner: documentRecord.employee,
+          completedAt: documentRecord.signedAt,
+          status: documentRecord.status
+        })),
+      ...(data.trainingCompletions || [])
+        .filter((completion) => completion.completedAt)
+        .map((completion) => ({
+          id: `record-training-${completion.id}`,
+          type: "Training",
+          title: data.courses.find((course) => course.id === completion.courseId)?.name || "Training completion",
+          locationId: completion.locationId,
+          owner: data.people.find((person) => person.id === completion.employeeId)?.name || "Employee record",
+          completedAt: completion.completedAt,
+          status: "Completed"
+        }))
+    ];
+    return rows.sort((left, right) => (
+      new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime()
+    ));
+  }
+
+  function setupJourney() {
+    const sourceCount = Number(
+      programLibrary.meta?.counts?.importCandidates
+      ?? programLibrary.importCandidates?.length
+      ?? 0
+    );
+    const publishedForms = allFormTemplates().filter(formAvailableForSubmission).length;
+    const completedRecords = completedWorkRecords().length;
+    const steps = [
+      {
+        id: "locations",
+        label: "Locations",
+        detail: data.locations.length
+          ? `${data.locations.length} active location${data.locations.length === 1 ? "" : "s"}`
+          : "Add the first operating location",
+        complete: data.locations.length > 0,
+        modal: "location",
+        actionLabel: "Add location",
+        available: canManageCompany()
+      },
+      {
+        id: "employees",
+        label: "Employees",
+        detail: data.people.length
+          ? `${data.people.length} employee record${data.people.length === 1 ? "" : "s"}`
+          : "Add employees who will receive forms and training",
+        complete: data.people.length > 0,
+        modal: "employee",
+        actionLabel: "Add employee",
+        available: canManageCompany()
+      },
+      {
+        id: "sources",
+        label: "Source library",
+        detail: sourceCount
+          ? `${sourceCount} imported source file${sourceCount === 1 ? "" : "s"}`
+          : "Load authorized company forms and programs",
+        complete: sourceCount > 0 || (programLibrary.programs || []).length > 0,
+        view: "programs",
+        actionLabel: "Open library",
+        available: true
+      },
+      {
+        id: "forms",
+        label: "Ready-to-use forms",
+        detail: publishedForms
+          ? `${publishedForms} published interactive form${publishedForms === 1 ? "" : "s"}`
+          : "Choose the first approved original to make operational",
+        complete: publishedForms > 0,
+        view: "programs",
+        actionLabel: "Review forms",
+        available: true
+      },
+      {
+        id: "records",
+        label: "First completed record",
+        detail: completedRecords
+          ? `${completedRecords} completed record${completedRecords === 1 ? "" : "s"}`
+          : "Assign or start a form and retain its signed evidence",
+        complete: completedRecords > 0,
+        view: "my-work",
+        actionLabel: "Open monitor",
+        available: true
+      }
+    ];
+    const completeCount = steps.filter((step) => step.complete).length;
+    return {
+      steps,
+      completeCount,
+      percent: Math.round((completeCount / steps.length) * 100),
+      next: steps.find((step) => !step.complete) || null
+    };
+  }
+
+  function renderSetupJourney() {
+    const setup = setupJourney();
+    if (!setup.next) return "";
+    const nextAction = setup.next.view
+      ? `<button class="button small primary" type="button" data-action="navigate" data-view="${setup.next.view}">${escapeHtml(setup.next.actionLabel)}</button>`
+      : `<button class="button small primary" type="button" data-action="open-modal" data-modal="${setup.next.modal}" ${setup.next.available ? "" : "disabled"}>${escapeHtml(setup.next.actionLabel)}</button>`;
+    return `
+      <section class="setup-journey" aria-labelledby="setup-journey-title">
+        <div class="setup-journey-header">
+          <div>
+            <p class="section-kicker">Current company setup</p>
+            <h2 id="setup-journey-title">Turn the source library into daily safety work</h2>
+            <p>${setup.completeCount} of ${setup.steps.length} foundations are ready. The next useful step is highlighted.</p>
+          </div>
+          <div class="setup-progress" aria-label="${setup.percent}% setup complete">
+            <strong>${setup.percent}%</strong>
+            <span><i style="--progress:${setup.percent}%"></i></span>
+          </div>
+        </div>
+        <ol class="setup-step-list">
+          ${setup.steps.map((step, index) => `
+            <li class="setup-step ${step.complete ? "complete" : step.id === setup.next.id ? "next" : ""}">
+              <span class="setup-step-marker" aria-hidden="true">${step.complete ? "✓" : index + 1}</span>
+              <span><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(step.detail)}</small></span>
+            </li>
+          `).join("")}
+        </ol>
+        <div class="setup-next-action">
+          <span><strong>Next:</strong> ${escapeHtml(setup.next.detail)}</span>
+          ${nextAction}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderQuickActions() {
+    const hasLocation = data.locations.length > 0;
+    const canReport = hasLocation && !isReadOnlyAuditor();
+    const canOperate = canWriteLocation();
+    const startableInspections = data.inspectionTemplates.filter((template) => (
+      template.published && template.currentVersionId && template.questions > 0
+    ));
+    const assignableForms = allFormTemplates().filter(formAvailableForSubmission);
+    const actions = [
+      {
+        icon: "F",
+        title: "Start a form",
+        detail: startableInspections.length ? `${startableInspections.length} inspection form${startableInspections.length === 1 ? "" : "s"} ready` : "No inspection form is published yet",
+        modal: "inspection",
+        enabled: canReport && startableInspections.length > 0
+      },
+      {
+        icon: "E",
+        title: "Assign employee form",
+        detail: assignableForms.length ? "Prepare a secure tablet handoff" : "Publish an interactive form first",
+        modal: "employee-form-assignment",
+        enabled: canOperate && data.people.length > 0 && assignableForms.length > 0
+      },
+      {
+        icon: "!",
+        title: "Report incident",
+        detail: "Capture an incident or near miss",
+        modal: "incident",
+        enabled: canReport
+      },
+      {
+        icon: "C",
+        title: "Record committee meeting",
+        detail: "Minutes, decisions, owners, and due dates",
+        modal: "committee",
+        enabled: canOperate
+      },
+      {
+        icon: "T",
+        title: "Assign training",
+        detail: data.courses.some((course) => course.published && course.currentVersionId)
+          ? "Send required training to an employee"
+          : "Publish a training course first",
+        modal: "training",
+        enabled: canOperate && data.courses.some((course) => course.published && course.currentVersionId)
+      },
+      {
+        icon: "P",
+        title: "Open forms library",
+        detail: `${Number(programLibrary.meta?.counts?.importCandidates || 0)} source files organized by folder`,
+        view: "programs",
+        enabled: true
+      }
+    ];
+    return `
+      <article class="card quick-start-card">
+        <div class="card-header">
+          <div><h2>Quick start</h2><p>Common safety-person workflows</p></div>
+        </div>
+        <div class="quick-action-grid">
+          ${actions.map((action) => `
+            <button
+              class="quick-action"
+              type="button"
+              data-action="${action.view ? "navigate" : "open-modal"}"
+              ${action.view ? `data-view="${action.view}"` : `data-modal="${action.modal}"`}
+              ${action.enabled ? "" : "disabled"}
+            >
+              <span class="quick-action-icon" aria-hidden="true">${action.icon}</span>
+              <span><strong>${escapeHtml(action.title)}</strong><small>${escapeHtml(action.detail)}</small></span>
+              <span class="quick-action-arrow" aria-hidden="true">→</span>
+            </button>
+          `).join("")}
+        </div>
+      </article>
+    `;
+  }
+
   function renderTaskRows(tasks) {
     if (!tasks.length) {
       return renderEmptyState("✓", "Nothing due here", "No assignments match the current location and filters.");
@@ -3014,6 +3320,7 @@
               <span class="task-due">${escapeHtml(task.due)}</span>
               ${task.employeeFormAssignmentId ? `<button class="button small primary" type="button" data-action="start-employee-form-handoff" data-assignment-id="${task.employeeFormAssignmentId}">Start tablet form</button>` : ""}
               ${task.employeeDocumentId ? `<button class="button small primary" type="button" data-action="open-employee-sign" data-document-id="${task.employeeDocumentId}">Review &amp; sign</button>` : ""}
+              ${!task.employeeFormAssignmentId && !task.employeeDocumentId && task.targetView ? `<button class="button small" type="button" data-action="navigate" data-view="${task.targetView}">Open</button>` : ""}
               <div class="progress" title="${task.progress}% complete">
                 <span style="--progress:${task.progress}%;--progress-color:${task.priority === "Critical" ? "var(--red)" : "var(--accent)"}"></span>
               </div>
@@ -3026,68 +3333,50 @@
 
   function renderDashboard() {
     const metrics = computeMetrics();
-    const tasks = filterLocation(data.tasks);
+    const tasks = orderedTasks(filterLocation(data.tasks));
+    const overdueTasks = tasks.filter((task) => taskDueBucket(task) === "overdue");
+    const dueTodayTasks = tasks.filter((task) => taskDueBucket(task) === "today");
+    const completedRecords = completedWorkRecords().filter((record) => (
+      state.locationId === "all" || record.locationId === state.locationId
+    ));
     const selectedLocations = activeLocation() ? [activeLocation()] : data.locations;
-    const attentionCount = filterLocation(data.actions).filter((action) => action.status === "Overdue").length +
-      filterLocation(data.tasks).filter((task) => task.status === "Overdue").length;
+    const trainingMeasured = selectedLocations.some((location) => location.hasTrainingData);
+    const inspectionsMeasured = selectedLocations.some((location) => location.hasInspectionData);
+    const credentialsMeasured = filterLocation(data.people).some((person) => !String(person.credentials).startsWith("0 "));
+    const acknowledgementsMeasured = data.documents.some((documentRecord) => typeof documentRecord.acknowledgement === "number");
     const readinessValues = [];
-    if (filterLocation(data.people).length) readinessValues.push(metrics.training, metrics.credentialsCurrent);
-    if (filterLocation(data.inspections).length) readinessValues.push(metrics.inspections);
-    if (data.documents.some((documentRecord) => typeof documentRecord.acknowledgement === "number")) {
-      readinessValues.push(metrics.documentAcknowledgements);
-    }
+    if (trainingMeasured) readinessValues.push(metrics.training);
+    if (inspectionsMeasured) readinessValues.push(metrics.inspections);
+    if (acknowledgementsMeasured) readinessValues.push(metrics.documentAcknowledgements);
+    if (credentialsMeasured) readinessValues.push(metrics.credentialsCurrent);
     const readiness = average(readinessValues);
+    const readinessMeasured = readinessValues.length > 0;
 
     return `
       ${renderPageHeading()}
-      <section class="alert-strip" aria-label="Items needing attention">
-        <span class="alert-icon" aria-hidden="true">${attentionCount ? "!" : "✓"}</span>
-        <div>
-          <strong>${attentionCount
-            ? `${attentionCount} item${attentionCount === 1 ? "" : "s"} need${attentionCount === 1 ? "s" : ""} action`
-            : "No overdue work is recorded"}</strong>
-          <p>${attentionCount
-            ? "Review the live corrective-action and assignment queues."
-            : "This workspace starts empty. Add real company records or import authorized source material to build the program."}</p>
-        </div>
-        <button class="button small" type="button" data-action="navigate" data-view="actions">Review actions</button>
+      ${renderSetupJourney()}
+      <section class="metric-grid status-metrics" aria-label="Current work status">
+        ${renderMetricCard("Overdue work", overdueTasks.length, "items past their due date", "!", "var(--red)", overdueTasks.length ? "Needs attention" : "Clear", Boolean(overdueTasks.length))}
+        ${renderMetricCard("Due today", dueTodayTasks.length, "scheduled for today", "D", "var(--amber)", dueTodayTasks.length ? "Workday queue" : "Nothing scheduled")}
+        ${renderMetricCard("Awaiting employee", metrics.employeeFormsPending, `${metrics.employeeFormsComplete} employee records completed`, "E", "var(--purple)", metrics.employeeFormsPending ? "Tablet handoff needed" : "Current", Boolean(metrics.employeeFormsPending))}
+        ${renderMetricCard("Completed records", completedRecords.length, "signed or submitted evidence", "✓", "var(--accent)", completedRecords.length ? "Evidence retained" : "No records yet")}
       </section>
-      <section class="metric-grid" aria-label="Safety performance metrics">
-        ${renderMetricCard("Training current", `${metrics.training}%`, "from live assignments", "T", "var(--purple)", "")}
-        ${renderMetricCard("Inspections complete", `${metrics.inspections}%`, "from live inspection records", "F", "var(--blue)", "")}
-        ${renderMetricCard("High-priority actions", metrics.urgent, "open across selected sites", "A", "var(--red)", metrics.urgent ? "Needs review" : "No high-priority action", Boolean(metrics.urgent))}
-        ${renderMetricCard("Employee forms", metrics.employeeFormsPending, `${metrics.employeeFormsComplete} completed or uploaded`, "E", "var(--accent)", metrics.employeeFormsPending ? "Awaiting employee" : "Current", Boolean(metrics.employeeFormsPending))}
-      </section>
-      <section class="dashboard-grid">
+      <section class="monitor-lead-grid">
         <div class="stack">
           <article class="card">
             <div class="card-header">
               <div>
-                <h2>Today’s fieldwork</h2>
-                <p>Prioritized across forms, training, actions, and acknowledgements</p>
+                <h2>Safety inbox</h2>
+                <p>Overdue and due-today work appears first</p>
               </div>
-              <button class="link-button" type="button" data-action="navigate" data-view="my-work">View full queue →</button>
+              <button class="link-button" type="button" data-action="navigate" data-view="my-work">Open monitor →</button>
             </div>
-            ${renderTaskRows(tasks.slice(0, 4))}
-          </article>
-          <article class="card">
-            <div class="card-header">
-              <div>
-                <h2>Recent activity</h2>
-                <p>Audit-ready events from across the company</p>
-              </div>
-            </div>
-            <div class="activity-list">
-              ${data.activity.map((item) => `
-                <div class="activity-item">
-                  <span class="activity-icon ${item.tone}" aria-hidden="true">${item.icon}</span>
-                  <p class="activity-text">${escapeHtml(item.text)}</p>
-                  <span class="activity-time">${escapeHtml(item.time)}</span>
-                </div>
-              `).join("") || renderEmptyState("•", "No audit activity yet", "Database-authored events will appear here as the company starts using SafetyOps.")}
-            </div>
+            ${renderTaskRows(tasks.slice(0, 5))}
           </article>
         </div>
+        ${renderQuickActions()}
+      </section>
+      <section class="dashboard-grid supporting-dashboard-grid">
         <div class="stack">
           <article class="card">
             <div class="card-header">
@@ -3099,13 +3388,14 @@
             </div>
             <div class="risk-list">
               ${selectedLocations.map((location) => {
+                const measured = location.hasTrainingData || location.hasInspectionData || location.hasActionData;
                 const score = locationReadinessScore(location);
                 const color = score < 82 ? "var(--red)" : score < 90 ? "var(--amber)" : "var(--accent)";
                 return `
-                  <div class="risk-row">
+                  <div class="risk-row ${measured ? "" : "not-measured"}">
                     <span class="risk-name">${escapeHtml(location.name)}</span>
-                    <span class="risk-score">${score}%</span>
-                    <div class="progress"><span style="--progress:${score}%;--progress-color:${color}"></span></div>
+                    <span class="risk-score">${measured ? `${score}%` : "Not measured"}</span>
+                    <div class="progress"><span style="--progress:${measured ? score : 0}%;--progress-color:${color}"></span></div>
                   </div>
                 `;
               }).join("") || renderEmptyState("L", "No locations", "Create the first authorized company location to begin location reporting.")}
@@ -3119,16 +3409,35 @@
               </div>
             </div>
             <div class="readiness">
-              <div class="donut" style="--value:${readiness}">
-                <strong>${readiness}%</strong>
-                <small>ready</small>
+              <div class="donut ${readinessMeasured ? "" : "not-measured"}" style="--value:${readinessMeasured ? readiness : 0}">
+                <strong>${readinessMeasured ? `${readiness}%` : "—"}</strong>
+                <small>${readinessMeasured ? "ready" : "not measured"}</small>
               </div>
               <div class="readiness-list">
-                <div class="readiness-item"><span>Training records</span><strong>${metrics.training}%</strong></div>
-                <div class="readiness-item"><span>Inspection records</span><strong>${metrics.inspections}%</strong></div>
-                <div class="readiness-item"><span>Document acknowledgements</span><strong>${metrics.documentAcknowledgements}%</strong></div>
-                <div class="readiness-item"><span>Credentials current</span><strong>${metrics.credentialsCurrent}%</strong></div>
+                <div class="readiness-item"><span>Training records</span><strong>${trainingMeasured ? `${metrics.training}%` : "—"}</strong></div>
+                <div class="readiness-item"><span>Inspection records</span><strong>${inspectionsMeasured ? `${metrics.inspections}%` : "—"}</strong></div>
+                <div class="readiness-item"><span>Document acknowledgements</span><strong>${acknowledgementsMeasured ? `${metrics.documentAcknowledgements}%` : "—"}</strong></div>
+                <div class="readiness-item"><span>Credentials current</span><strong>${credentialsMeasured ? `${metrics.credentialsCurrent}%` : "—"}</strong></div>
               </div>
+            </div>
+          </article>
+        </div>
+        <div class="stack">
+          <article class="card">
+            <div class="card-header">
+              <div>
+                <h2>Recent activity</h2>
+                <p>Database-authored events supporting the audit trail</p>
+              </div>
+            </div>
+            <div class="activity-list">
+              ${data.activity.slice(0, 8).map((item) => `
+                <div class="activity-item">
+                  <span class="activity-icon ${item.tone}" aria-hidden="true">${item.icon}</span>
+                  <p class="activity-text">${escapeHtml(item.text)}</p>
+                  <span class="activity-time">${escapeHtml(item.time)}</span>
+                </div>
+              `).join("") || renderEmptyState("•", "No activity yet", "Completed work and administrative changes will appear here as the company starts using SafetyOps.")}
             </div>
           </article>
         </div>
@@ -3137,30 +3446,55 @@
   }
 
   function renderMyWork() {
-    const tasks = filterLocation(data.tasks);
-    const overdue = tasks.filter((task) => task.status === "Overdue").length;
+    const tasks = orderedTasks(filterLocation(data.tasks));
+    const overdue = tasks.filter((task) => taskDueBucket(task) === "overdue");
+    const dueToday = tasks.filter((task) => taskDueBucket(task) === "today");
+    const upcoming = tasks.filter((task) => taskDueBucket(task) === "upcoming");
+    const completedRecords = completedWorkRecords().filter((record) => (
+      state.locationId === "all" || record.locationId === state.locationId
+    ));
     return `
       ${renderPageHeading()}
-      <section class="split-summary">
-        <article class="summary-card"><span>Due today</span><strong>${tasks.filter((task) => task.due.includes("Today")).length}</strong></article>
-        <article class="summary-card"><span>Overdue</span><strong>${overdue}</strong></article>
-        <article class="summary-card"><span>Upcoming</span><strong>${tasks.filter((task) => !task.due.includes("Today") && task.status !== "Overdue").length}</strong></article>
+      <section class="monitor-summary-grid" aria-label="Safety monitor status">
+        <article class="monitor-summary-card overdue"><span>Overdue</span><strong>${overdue.length}</strong><small>Past the required date</small></article>
+        <article class="monitor-summary-card today"><span>Due today</span><strong>${dueToday.length}</strong><small>Scheduled for this workday</small></article>
+        <article class="monitor-summary-card"><span>Upcoming</span><strong>${upcoming.length}</strong><small>Future assigned work</small></article>
+        <article class="monitor-summary-card complete"><span>Completed records</span><strong>${completedRecords.length}</strong><small>Signed or submitted evidence</small></article>
       </section>
-      <article class="card">
-        <div class="toolbar">
-          <div class="tabs" aria-label="Work filters">
-            <button class="tab active" type="button">All work</button>
-            <button class="tab" type="button" data-action="prototype-action" data-message="Saved queue filters will be backed by user preferences.">Assigned to me</button>
-            <button class="tab" type="button" data-action="prototype-action" data-message="The team queue will be available to managers and safety administrators.">My team</button>
+      <section class="monitor-register-grid">
+        <article class="card monitor-open-work">
+          <div class="card-header">
+            <div>
+              <h2>Open work</h2>
+              <p>Forms, signatures, training, and action items ordered by urgency</p>
+            </div>
+            <span class="status-pill ${overdue.length ? "red" : "green"}">${overdue.length ? `${overdue.length} overdue` : "On track"}</span>
           </div>
-          <select class="filter-select" aria-label="Sort work queue">
-            <option>Priority first</option>
-            <option>Due date</option>
-            <option>Location</option>
-          </select>
-        </div>
-        ${renderTaskRows(tasks)}
-      </article>
+          ${renderTaskRows(tasks)}
+        </article>
+        <section class="table-card monitor-completed-card">
+          <div class="table-header">
+            <div><h2>Recent completed records</h2><p>Immutable submissions and completion evidence</p></div>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Record</th><th>Type</th><th>Employee / signer</th><th>Location</th><th>Completed</th><th>Status</th></tr></thead>
+              <tbody>
+                ${completedRecords.slice(0, 12).map((record) => `
+                  <tr>
+                    <td class="primary-cell">${escapeHtml(record.title)}</td>
+                    <td>${escapeHtml(record.type)}</td>
+                    <td>${escapeHtml(record.owner)}</td>
+                    <td>${escapeHtml(locationName(record.locationId))}</td>
+                    <td>${escapeHtml(formatShortDate(record.completedAt))}</td>
+                    <td>${statusPill(record.status)}</td>
+                  </tr>
+                `).join("") || `<tr><td colspan="6">${renderEmptyState("✓", "No completed records yet", "Signed forms, inspection submissions, training completions, and employee acknowledgements will appear here.")}</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
     `;
   }
 

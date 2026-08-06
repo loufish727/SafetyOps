@@ -16,25 +16,40 @@ SafetyOps gives a company one reliable safety record across all locations withou
 ## Navigation model
 
 ```text
-Overview
-├── Command center
-└── My work
+Today
+├── Today
+└── Safety monitor
 
-Safety operations
-├── Forms & inspections
+Run safety
+├── Forms
+├── Committee
 ├── Training
 ├── Incidents
-└── Corrective actions
+└── Action items
 
-Compliance
-├── OSHA reference
+Library & compliance
+├── Forms & programs
 ├── Documents
-├── People & credentials
-└── Locations
+└── OSHA guide
 
-Workspace
+Company
+├── Employees
+├── Locations
 └── Settings
 ```
+
+The shell is organized by the safety coordinator's intent rather than by the
+underlying tables. **Today** is a prioritized work inbox: setup blockers,
+overdue work, work due today, employee handoffs, and recently completed
+evidence appear before aggregate health measures. **Safety monitor** separates
+open work from completed records and is the review surface across locations.
+
+Operational content and imported source evidence remain distinct. **Forms &
+programs** contains approved, ready-to-use interactive templates and controlled
+company programs. **Documents** contains readable or signable resources. The
+Drive-derived folder tree is an administrator source archive used for
+classification, provenance, privacy review, and conversion; it is not the
+default worker or coordinator menu.
 
 ## Core workflow loops
 
@@ -116,6 +131,13 @@ Official source snapshot and SHA-256
 ## Prototype decisions
 
 - Use the MaintainOps architecture pattern: static GitHub-hosted frontend with Supabase as the authenticated data and security authority.
+- Keep interactive form templates, PDF resources, assignments, completed
+  records, and linked follow-ups as separate objects with explicit lineage.
+- Make the default landing page a real-work queue and setup journey, not a
+  percentage dashboard populated by empty-state zeroes.
+- Keep active forms and company programs separate from the imported source
+  archive; preserve exact originals and expose conversion or assignment as
+  deliberate actions.
 - Preserve `company_id` even though the first customer has one company.
 - Use `location_id` on location-scoped work.
 - Keep document classification separate from document access.
@@ -136,7 +158,8 @@ Official source snapshot and SHA-256
 The prototype succeeds when a stakeholder can:
 
 1. Switch between all-company and one-location views.
-2. Understand current safety health within ten seconds.
+2. See within ten seconds what is overdue, due today, awaiting an employee,
+   recently completed, or blocked by setup.
 3. Start and submit an inspection.
 4. Report an incident or near miss.
 5. Assign training.
@@ -147,6 +170,8 @@ The prototype succeeds when a stakeholder can:
 10. Understand how Supabase will enforce company, role, location, file, and regulatory-catalogue access.
 11. Assign an employee form, hand over a tablet without creating an employee
     login, and see pending change to completed after one-time submission.
+12. Find an approved operational form without navigating the source archive,
+    while an administrator can still trace it to the exact imported original.
 
 ## Deliberately deferred
 

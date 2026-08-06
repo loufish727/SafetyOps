@@ -28,7 +28,7 @@ the exact release revision and environment.
 
 ## Code and browser QA — LFES-REL-001, LFES-VER-001
 
-- [x] The current Playwright run passed 95, skipped 7, and failed 0 across
+- [x] The current Playwright run passed 97, skipped 7, and failed 0 across
   desktop and mobile projects.
 - [x] The seven conditional skips were reviewed: four require private fixture
   or original-PDF evidence, and three are desktop-only mirrors of mobile

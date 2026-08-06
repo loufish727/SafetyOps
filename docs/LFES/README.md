@@ -39,7 +39,7 @@ contains eighteen ordered migrations and three Edge Functions. Migrations
 `016` through `018` passed hosted rollback compilation, were applied, and have
 ledger entries bound to their reviewed source SHA-256 values; exact legacy
 applied-file checksums are not asserted. The employee-document function is
-active with JWT verification. The latest full local Playwright run passed 95
+active with JWT verification. The latest full local Playwright run passed 97
 tests, skipped 7
 conditional/project instances, and failed 0. The public-release process uses
 an Ed25519-signed v2 manifest over the

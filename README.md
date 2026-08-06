@@ -16,11 +16,17 @@ The browser implementation, eighteen ordered migrations, and three Edge Function
 - Form drafts, typed answers, electronic signatures, and pinned source/schema lineage
 - Inspection, incident, training-assignment, corrective-action, and document-acknowledgement workflows
 - Employee directory, safety-committee minutes, action ownership, training completion/retention, and employee-bound document records
+- Task-first **Today** workspace with an adaptive setup journey, prioritized
+  safety inbox, quick actions, due-state summaries, and a **Safety monitor**
+  that separates open work from recently completed evidence
 - Facilitated employee forms: the safety user assigns a published form, starts a 15-minute one-time tablet handoff, and sees pending/completed status without requiring the employee to have an account
 - Append-only employee form submissions with pinned employee/location/facilitator/schema evidence and an immutable SHA-256 manifest; consumed handoffs cannot be replayed
 - Controlled form-original downloads through short-lived, one-object signed URLs
 - Per-item Drive-original access review: reusable internal material defaults to authenticated company access, while safety/admin private material remains manager-only and nothing is anonymously public
 - Source-preserving Drive library navigation with source collections as headlines, exact nested folders as collapsible categories, stable counts, and naturally sorted files
+- Separate operational library concepts for interactive forms and programs,
+  readable/signable documents, and the administrator-focused import/source archive;
+  source originals retain provenance without becoming the everyday work menu
 - Full structural eCFR index for 29 CFR Chapter XVII, current through 2026-07-29
 - Curated high-use Oregon OSHA, Washington DOSH, and Cal/OSHA starter references
 - Location regulatory profiles, jurisdiction assignments, applicability assessments, approved control mappings, and evidence lineage
@@ -29,7 +35,7 @@ The browser implementation, eighteen ordered migrations, and three Edge Function
 - Service-only invite-owner bootstrap, retirement of both browser self-onboarding RPCs, single-active-company membership, attributable membership audit, last-administrator protection, state-aware location creation, database-derived jurisdiction review, and resolved-jurisdiction program gating in migration `011`
 - Row Level Security, immutable version records, append-only audit records, and private Storage design
 - Bounded browser queries, with explicit server pagination still required before large-scale use
-- Responsive desktop/mobile interface; the latest full local Playwright run completed with 95 passed, 7 conditional/project skips, and 0 failures
+- Responsive desktop/mobile interface; the latest full local Playwright run completed with 97 passed, 7 conditional/project skips, and 0 failures
 - GitHub Pages build and deployment workflow
 
 Some administrative workflows remain intentionally unavailable until their server-side services are deployed. In particular, SafetyOps does **not** yet provide a production form-original upload service. The checked-in `sign-form-file` Edge Function authorizes downloads of already committed, verified form originals; it is not an upload, quarantine, malware-scan, or commit service. The separate employee-PDF service provides short-lived upload sessions, exact-size/SHA-256 verification, recoverable processing leases, quarantine, and a service-only scan attestation bound to the stored hash. It releases a PDF only when a configured trusted scanner reports those exact bytes `clean`; with no scanner configured, the document remains non-releasable with malware status `unavailable`. Development-only local upload staging is disabled by default and is never the production system of record.
@@ -158,6 +164,7 @@ The eCFR is continuously updated and is not the official legal edition of the CF
 ## Reference documents
 
 - `docs/competitive-research.md`
+- `docs/sitedocs-product-research.md`
 - `docs/form-originals-and-templates.md`
 - `docs/employee-safety-workflows.md`
 - `docs/google-drive-safety-program-ingestion.md`

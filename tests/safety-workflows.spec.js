@@ -10,7 +10,7 @@ const LOCATION = WORKSPACE_FIXTURE.locations[0];
 async function openWorkspace(page, options = {}) {
   await configureAuthenticatedWorkspace(page, { programFixture: true, ...options });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Safety command center" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
 }
 
 async function navigateTo(page, view, heading) {
@@ -21,7 +21,7 @@ async function navigateTo(page, view, heading) {
 }
 
 async function openEmployeeRecord(page) {
-  await navigateTo(page, "people", "People & credentials");
+  await navigateTo(page, "people", "Employees & credentials");
   const employeeRow = page.getByRole("row").filter({ hasText: EMPLOYEE.fullName });
   await employeeRow.getByRole("button", { name: "Open record" }).click();
   await expect(page.getByRole("dialog", { name: EMPLOYEE.fullName })).toBeVisible();
@@ -214,8 +214,8 @@ test("an assigned employee form is completed in a single-use anonymous tablet ha
   await assignmentDialog.getByRole("button", { name: "Assign form" }).click();
 
   await expect(page.getByText("Employee form assigned", { exact: true })).toBeVisible();
-  await navigateTo(page, "dashboard", "Safety command center");
-  const employeeFormsMetric = page.locator(".metric-card").filter({ hasText: "Employee forms" });
+  await navigateTo(page, "dashboard", "Today");
+  const employeeFormsMetric = page.locator(".metric-card").filter({ hasText: "Awaiting employee" });
   await expect(employeeFormsMetric.locator(".metric-value, strong").first()).toHaveText("1");
 
   employeeDrawer = await openEmployeeRecord(page);
@@ -288,8 +288,8 @@ test("an assigned employee form is completed in a single-use anonymous tablet ha
   await page.bringToFront();
   await page.reload();
   await expect(page.getByText(WORKSPACE_FIXTURE.company.name, { exact: true })).toBeVisible();
-  await navigateTo(page, "dashboard", "Safety command center");
-  const refreshedEmployeeFormsMetric = page.locator(".metric-card").filter({ hasText: "Employee forms" });
+  await navigateTo(page, "dashboard", "Today");
+  const refreshedEmployeeFormsMetric = page.locator(".metric-card").filter({ hasText: "Awaiting employee" });
   await expect(refreshedEmployeeFormsMetric.locator(".metric-value, strong").first()).toHaveText("0");
 
   const evidence = await page.evaluate(() => ({
@@ -332,8 +332,8 @@ test("an assigned employee form is completed in a single-use anonymous tablet ha
 
 test("a safety user facilitates tablet signing of a scanned-clean employee PDF", async ({ page }) => {
   let employeeDrawer = await openEmployeeRecord(page);
-  await navigateTo(page, "dashboard", "Safety command center");
-  const employeeFormsMetric = page.locator(".metric-card").filter({ hasText: "Employee forms" });
+  await navigateTo(page, "dashboard", "Today");
+  const employeeFormsMetric = page.locator(".metric-card").filter({ hasText: "Awaiting employee" });
   await expect(employeeFormsMetric.locator(".metric-value, strong").first()).toHaveText("1");
 
   employeeDrawer = await openEmployeeRecord(page);
@@ -356,7 +356,7 @@ test("a safety user facilitates tablet signing of a scanned-clean employee PDF",
     hasText: WORKSPACE_FIXTURE.employeeDocument.title
   });
   await expect(acknowledgement).toContainText("Signed");
-  await navigateTo(page, "dashboard", "Safety command center");
+  await navigateTo(page, "dashboard", "Today");
   await expect(employeeFormsMetric.locator(".metric-value, strong").first()).toHaveText("0");
 
   const evidence = await page.evaluate(() => ({
