@@ -38,7 +38,7 @@ async function openProgramLibrary(page, projectName) {
     await page.goto("/");
   } else {
     await page.goto("/");
-    await page.getByRole("button", { name: "Safety programs" }).click();
+    await page.getByRole("button", { name: "Forms & programs", exact: true }).click();
   }
 }
 
@@ -51,7 +51,7 @@ test("private safety program library exposes source trace and folders", async ({
   await openProgramLibrary(page, testInfo.project.name);
   await requirePrivateLibrary(page);
 
-  await expect(page.getByRole("heading", { name: "Safety programs & forms" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Forms & program library" })).toBeVisible();
   await expect(page.getByText("Private-source inventory connected", { exact: true })).toBeVisible();
   await expect(page.getByText("Accident Prevention Program", { exact: true })).toBeVisible();
 
@@ -422,7 +422,7 @@ test("Drive archive rejects mismatched download metadata", async ({ page }, test
 
 test("Drive archive query failure does not break the workspace", async ({ page }, testInfo) => {
   await openProgramLibrary(page, testInfo.project.name);
-  await expect(page.getByRole("heading", { name: "Safety programs & forms" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Forms & program library" })).toBeVisible();
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
   await page.getByRole("tab", { name: /Drive archive review/ }).click();
 

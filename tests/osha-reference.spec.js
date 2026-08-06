@@ -9,11 +9,14 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openGuide(page, projectName) {
-  await page.goto("/");
   if (projectName === "mobile") {
-    await page.getByRole("button", { name: "Guide", exact: true }).click();
+    await page.addInitScript(() => {
+      localStorage.setItem("safetyops.ui.view", "standards");
+    });
+    await page.goto("/");
   } else {
-    await page.getByRole("button", { name: "OSHA reference", exact: true }).click();
+    await page.goto("/");
+    await page.getByRole("button", { name: "OSHA guide", exact: true }).click();
   }
   await expect(page.getByRole("heading", { name: "OSHA standards reference" })).toBeVisible();
 }
@@ -102,9 +105,13 @@ test("state trace is explicit about pending source snapshots", async ({ page }, 
 test("opening a question trace preserves an in-progress inspection", async ({ page }, testInfo) => {
   await page.goto("/");
   if (testInfo.project.name === "mobile") {
-    await page.getByRole("button", { name: "Inspect", exact: true }).click();
+    await page.getByRole("navigation", { name: "Mobile navigation" })
+      .getByRole("button", { name: "Forms", exact: true })
+      .click();
   } else {
-    await page.getByRole("button", { name: "Forms & inspections" }).click();
+    await page.getByLabel("Primary navigation")
+      .getByRole("button", { name: "Forms", exact: true })
+      .click();
   }
 
   const forkliftTemplate = page.locator(".template-card").filter({ hasText: "Powered industrial truck pre-use" });

@@ -97,6 +97,28 @@ Workspace reads now have explicit collection caps, generally 30 to 1,000 rows.
 They are bounded first loads, not pagination: deterministic cursors/ranges,
 truncation indicators, and detail-on-demand remain required before scale.
 
+### Browser information architecture
+
+The browser shell presents the existing data contracts through four
+intent-based groups:
+
+- **Today:** a task-first coordinator inbox and cross-location Safety monitor;
+- **Run safety:** forms, committee work, training, incidents, and action items;
+- **Library & compliance:** approved forms/programs, documents/resources, and
+  the OSHA guide; and
+- **Company:** employees, locations, and settings.
+
+This navigation is a presentation boundary, not an authorization boundary.
+Supabase RLS, narrow RPCs, private Storage, and Edge Function checks remain
+authoritative regardless of whether a control or record appears in the shell.
+
+The operational library also keeps three concepts separate: interactive form
+templates, readable or signable document resources, and the Drive-derived
+import/source archive. The archive preserves originals, folder lineage,
+classification, access review, and conversion provenance, but it is not the
+default work queue or worker-facing menu. Completed submissions and signatures
+remain immutable operational evidence rather than files in that archive.
+
 ## Database layer
 
 Migrations must be applied in filename order:

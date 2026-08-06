@@ -16,7 +16,7 @@ test("unconfigured public build requires Supabase and contains no demo company",
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Connect SafetyOps to Supabase" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Safety command center" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeHidden();
   await expect(page.getByText(WORKSPACE_FIXTURE.company.name, { exact: true })).toBeHidden();
 
   const publicData = await page.evaluate(() => ({
@@ -34,26 +34,50 @@ test("unconfigured public build requires Supabase and contains no demo company",
 test("dashboard and location context work", async ({ page }) => {
   await configureAuthenticatedWorkspace(page);
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Safety command center" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
 
   const primaryLocation = WORKSPACE_FIXTURE.locations[0];
   await expect(page.getByText(WORKSPACE_FIXTURE.company.name, { exact: true })).toBeVisible();
-  await expect(page.getByText("Training current", { exact: true })).toBeVisible();
+  await expect(page.getByText("Completed records", { exact: true }).first()).toBeVisible();
 
   await page.getByLabel("Filter by location").selectOption(primaryLocation.id);
   await expect(page.locator(".page-heading")).toContainText(primaryLocation.name);
   await expect(
-    page.locator(".metric-card").filter({ hasText: "Training current" }).getByText("0%", { exact: true })
+    page.locator(".metric-card").filter({ hasText: "Completed records" }).getByText("0", { exact: true })
   ).toBeVisible();
+});
+
+test("task-first home exposes setup, quick actions, the safety inbox, and the monitor", async ({ page }) => {
+  await configureAuthenticatedWorkspace(page);
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Turn the source library into daily safety work" })
+  ).toBeVisible();
+  await expect(page.getByLabel(/% setup complete$/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Safety inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Quick start" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Start a form/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Report incident/ })).toBeVisible();
+
+  await page.getByRole("button", { name: /Open monitor/ }).click();
+  await expect(page.getByRole("heading", { name: "Safety monitor", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Open work" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent completed records" })).toBeVisible();
 });
 
 test("inspection workflow creates a submitted record", async ({ page }, testInfo) => {
   await configureAuthenticatedWorkspace(page);
   await page.goto("/");
   if (testInfo.project.name === "mobile") {
-    await page.getByRole("button", { name: "Inspect", exact: true }).click();
+    await page.getByRole("navigation", { name: "Mobile navigation" })
+      .getByRole("button", { name: "Forms", exact: true })
+      .click();
   } else {
-    await page.getByRole("button", { name: "Forms & inspections" }).click();
+    await page.getByLabel("Primary navigation")
+      .getByRole("button", { name: "Forms", exact: true })
+      .click();
   }
   await expect(page.getByRole("heading", { name: "Forms & inspections" })).toBeVisible();
 
