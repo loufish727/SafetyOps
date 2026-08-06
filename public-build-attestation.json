@@ -4,8 +4,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 415532,
-      "sha256": "f3e0d1f4d4f42a5f7c7fb0316bb891fc1753f04e120cb7589747b17ff613578b"
+      "bytes": 429452,
+      "sha256": "7e1966ef54470d9c37eacfde7a197f90159848985fe602c2669203e050e6f9de"
     },
     {
       "path": "data.js",
@@ -39,13 +39,13 @@
     },
     {
       "path": "state-osha-reference.js",
-      "bytes": 37816,
-      "sha256": "135f10a3f401a9366fa2a60c2cbb9dad77bde2663dd8d64e2f41c6f62429969f"
+      "bytes": 61498,
+      "sha256": "f976b05c227401b0ad453494cac352ec861ff03a1aee48861a98601fd3844f6c"
     },
     {
       "path": "styles.css",
-      "bytes": 144834,
-      "sha256": "f15a0227398517353b2b91b83bb4228bb9bf847d5cbcc8048e7fba27bd63bb0b"
+      "bytes": 147913,
+      "sha256": "241d61e6b2133f924bb335160949e4853bb97a608b759718a116f99360986e36"
     },
     {
       "path": "supabase-config.js",
@@ -63,7 +63,7 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "aggregateSha256": "b33425fcefd865079660e9096d5b57b836cddf3afb315983f3c929ea01a1d82f",
+  "aggregateSha256": "3ca0df8dd992cdb4f0d4be225b6177639b13c09a27c97688a7471b44cf128a14",
   "releaseFiles": [
     {
       "path": ".github/workflows/deploy-pages.yml",
@@ -77,8 +77,8 @@
     },
     {
       "path": "app.js",
-      "bytes": 415532,
-      "sha256": "f3e0d1f4d4f42a5f7c7fb0316bb891fc1753f04e120cb7589747b17ff613578b"
+      "bytes": 429452,
+      "sha256": "7e1966ef54470d9c37eacfde7a197f90159848985fe602c2669203e050e6f9de"
     },
     {
       "path": "data.js",
@@ -92,8 +92,8 @@
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 13951,
-      "sha256": "276f2b67a686f07f184e867e14b33a981bfdb5992f171d3cbcfc4706ab243c9e"
+      "bytes": 14124,
+      "sha256": "9dd739d0cdbbc915cc9c3ae5ba008780b146598e49459fd52f270cdc650ed87f"
     },
     {
       "path": "docs/competitive-research.md",
@@ -132,18 +132,18 @@
     },
     {
       "path": "docs/LFES/CONTROL_MATRIX.md",
-      "bytes": 6290,
-      "sha256": "6a568e69972450a1a380a86c415db14f70368ecfd982b918201bdd4e08901014"
+      "bytes": 6291,
+      "sha256": "d3d55ecdf9307bcf11e8b43f4544df71c60354f7b175dd152acb58aef235c69d"
     },
     {
       "path": "docs/LFES/DECISIONS_AND_ASSUMPTIONS.md",
-      "bytes": 5787,
-      "sha256": "8edc5bfef273e0e0c66eceb79afea48419b4f7f1fd8c39931292ee152e1a2c90"
+      "bytes": 5899,
+      "sha256": "7039c044a3f2adadc8440821da578e662192e5df5110e05473a51523e6f6a750"
     },
     {
       "path": "docs/LFES/PROOF_MODEL.md",
-      "bytes": 4113,
-      "sha256": "a02b3fbd322bf0973fa3d63fb63a9bd03eacecf1f8afa81b9044eddec7a4eeb4"
+      "bytes": 4155,
+      "sha256": "3212e50282f0bb003dfd98055b47874fd7db2b6c10db827622faa4088c394466"
     },
     {
       "path": "docs/LFES/README.md",
@@ -157,8 +157,8 @@
     },
     {
       "path": "docs/osha-reference-architecture.md",
-      "bytes": 17174,
-      "sha256": "97c55eb73b4352a31a49865978fe507260ce5825d65b2b361f3ef439ebf114f5"
+      "bytes": 19214,
+      "sha256": "17440097cb9550533b8fd8f9aa18aea227c8b4f16fb06c13fb8cb256ea322ad5"
     },
     {
       "path": "docs/product-blueprint.md",
@@ -167,8 +167,8 @@
     },
     {
       "path": "docs/QA_LOG.md",
-      "bytes": 9444,
-      "sha256": "61182aa703f29d481aec6e092eb56bbb8a7648efd670e846faca5aff48179162"
+      "bytes": 9751,
+      "sha256": "6c18609d22d416a7421591e8b919e0ec21aaed2304d14801bae14effcca0b254"
     },
     {
       "path": "docs/RELEASE_CHECKLIST.md",
@@ -222,8 +222,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 17230,
-      "sha256": "77e9d7cbb5174b6f39ba92b1d68b6395b0446c7ac01df08fad5e89394ff2a7cf"
+      "bytes": 17391,
+      "sha256": "529aeadc09f032558235dbe193ee9e887825e79216eb886e876df9c7850b8527"
     },
     {
       "path": "safety-program-extracts.js",
@@ -287,13 +287,13 @@
     },
     {
       "path": "state-osha-reference.js",
-      "bytes": 37816,
-      "sha256": "135f10a3f401a9366fa2a60c2cbb9dad77bde2663dd8d64e2f41c6f62429969f"
+      "bytes": 61498,
+      "sha256": "f976b05c227401b0ad453494cac352ec861ff03a1aee48861a98601fd3844f6c"
     },
     {
       "path": "styles.css",
-      "bytes": 144834,
-      "sha256": "f15a0227398517353b2b91b83bb4228bb9bf847d5cbcc8048e7fba27bd63bb0b"
+      "bytes": 147913,
+      "sha256": "241d61e6b2133f924bb335160949e4853bb97a608b759718a116f99360986e36"
     },
     {
       "path": "supabase-config.example.js",
@@ -437,13 +437,13 @@
     },
     {
       "path": "tests/helpers/authenticated-workspace.js",
-      "bytes": 89304,
-      "sha256": "55f0b309c57dc1e70a9b1ded269eff3f53bfedd704f528628e9e16a6141c3ec5"
+      "bytes": 89547,
+      "sha256": "38a8874672a5e7bc8c7dd09bfff5d57aee2b1b03e9d78f0b9a9e86456c27c625"
     },
     {
       "path": "tests/osha-reference.spec.js",
-      "bytes": 6272,
-      "sha256": "7cbb7d9a3927874500aaf15ba8c045da1aeb26a8f11bf3b0a5bde858b56f89fd"
+      "bytes": 11261,
+      "sha256": "d9af2fbbb4a30cbaca8d0106391c735ac59ad48b87be2a1f09cfbc3c1b440a51"
     },
     {
       "path": "tests/safety-programs.spec.js",
@@ -466,5 +466,5 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "releaseAggregateSha256": "82484b00c5420b4fe63a2a490492677bd8bfcacb59fa19d76d7161f450f1768a"
+  "releaseAggregateSha256": "3aee4ed85af4cf314043489cbe5c42b1f6e7d1ebd7328c40d22804756db53d72"
 }

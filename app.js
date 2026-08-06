@@ -80,8 +80,8 @@
     standardQuery: "",
     standardPart: "all",
     standardScope: "all",
-    standardMode: "featured",
-    standardAuthority: localStorage.getItem(`${uiStoragePrefix}standardAuthority`) || "location",
+    standardMode: "manufacturing",
+    standardAuthority: "location",
     referenceId: null,
     programCategory: "programs",
     programQuery: "",
@@ -255,9 +255,9 @@
       description: "Find ready-to-use forms and programs first, with imports and source originals kept in their own review area."
     },
     standards: {
-      eyebrow: "Regulatory library",
-      title: "OSHA standards reference",
-      description: "Search verified federal standards and state-plan overlays, then trace them to company controls and records."
+      eyebrow: "Oregon manufacturing reference",
+      title: "Oregon OSHA manufacturing guide",
+      description: "Start with Oregon general-industry rules prioritized for manufacturing, then trace each source to company controls and retained evidence."
     },
     people: {
       eyebrow: "Workforce compliance",
@@ -612,6 +612,7 @@
             <span class="binding-badge ${escapeHtml(bindingLevel)}">${escapeHtml(bindingLevel)}</span>
             ${standard?.jurisdiction ? `<span class="binding-badge ${stateSource ? "state-plan" : "regulation"}">${escapeHtml(standard.jurisdiction)}</span>` : ""}
             ${statusPill(stateSource ? "Official link verified" : "Official source", stateSource ? "blue" : "green")}
+            ${standard && isManufacturingReference(standard) ? statusPill("Manufacturing focus", "purple") : ""}
           </div>
 
           <section class="reference-section">
@@ -619,6 +620,21 @@
             <p>${escapeHtml(summary)}</p>
             <p class="reference-caution">Summary only. Read the full provision, definitions, exceptions, and jurisdiction-specific rules before making an applicability or compliance decision.</p>
           </section>
+
+          ${stateSource ? `
+            <section class="reference-section">
+              <h3>Applicability context</h3>
+              <dl class="reference-context-list">
+                <div><dt>Authority type</dt><dd>${escapeHtml(standard.authorityType || "State-plan reference")}</dd></div>
+                <div><dt>Review state</dt><dd>Candidate · human applicability review required</dd></div>
+                ${standard.scopeCategory ? `<div><dt>Scope category</dt><dd>${escapeHtml(standard.scopeCategory)}</dd></div>` : ""}
+                ${(standard.workAreas || []).length ? `<div><dt>Relevant work areas</dt><dd>${escapeHtml(standard.workAreas.join(", "))}</dd></div>` : ""}
+                ${(standard.equipment || []).length ? `<div><dt>Equipment examples</dt><dd>${escapeHtml(standard.equipment.join(", "))}</dd></div>` : ""}
+                ${standard.federalReferenceIdentifier ? `<div><dt>Adopted-source cross-reference</dt><dd>29 CFR ${escapeHtml(standard.federalReferenceIdentifier)} · Oregon adoption crosswalk pending review</dd></div>` : ""}
+              </dl>
+              ${standard.changeNote ? `<p class="reference-caution">Change watch: ${escapeHtml(standard.changeNote)}</p>` : ""}
+            </section>
+          ` : ""}
 
           <section class="source-fingerprint">
             <h3>Source fingerprint</h3>
@@ -1072,7 +1088,7 @@
           .maybeSingle(),
         supabaseClient
           .from("location_regulatory_profiles")
-          .select("id, location_id, version, state_code, status, effective_from, effective_to, reviewed_by, reviewed_at, updated_at, location_jurisdiction_assignments(coverage_status, valid_from, valid_to, reviewed_by, reviewed_at, jurisdiction:regulatory_jurisdictions(code, name))")
+          .select("id, location_id, version, state_code, employer_type, naics_codes, operation_facts, hazard_facts, status, effective_from, effective_to, reviewed_by, reviewed_at, updated_at, location_jurisdiction_assignments(coverage_status, valid_from, valid_to, reviewed_by, reviewed_at, jurisdiction:regulatory_jurisdictions(code, name))")
           .eq("company_id", membership.company_id)
           .order("version", { ascending: false })
           .limit(500),
@@ -2291,6 +2307,12 @@
           regulatoryProfileId: regulatoryProfile?.id || null,
           regulatoryProfileStatus: profileApproved ? "approved" : "review_required",
           regulatoryCoverageStatus: assignment?.coverage_status || "requires_review",
+          regulatoryEmployerType: regulatoryProfile?.employer_type || "other",
+          regulatoryNaicsCodes: Array.isArray(regulatoryProfile?.naics_codes)
+            ? regulatoryProfile.naics_codes
+            : [],
+          regulatoryOperationFacts: regulatoryProfile?.operation_facts || {},
+          regulatoryHazardFacts: regulatoryProfile?.hazard_facts || {},
           regulatoryReviewPending: Boolean(
             approvedProfile
             && locationProfiles[0]
@@ -2898,9 +2920,26 @@
       return `<button class="button primary" type="button" data-action="prototype-action" data-message="The upload workflow will create an immutable document version in private Supabase Storage.">Upload document</button>`;
     }
     if (view === "standards") {
+      const jurisdiction = activeLocation() ? jurisdictionForLocation(activeLocation()) : null;
+      const plan = jurisdiction ? planForJurisdiction(jurisdiction) : null;
+      const federalView = state.standardAuthority === "federal";
+      const officialUrl = federalView
+        ? "https://www.ecfr.gov/current/title-29/subtitle-B/chapter-XVII"
+        : jurisdiction === "US-OR"
+          ? "https://osha.oregon.gov/rules/final/pages/division-2.aspx"
+          : plan?.officialUrl;
+      const officialLabel = federalView
+        ? "Open official eCFR"
+        : jurisdiction === "US-OR"
+          ? "Open Oregon Division 2"
+          : jurisdiction
+            ? `Open ${jurisdictionLabel(jurisdiction)} rules`
+            : "Select a location for official rules";
       return `
         <button class="button" type="button" data-action="check-osha-update">Check source status</button>
-        <a class="button primary" href="https://www.ecfr.gov/current/title-29/subtitle-B/chapter-XVII" target="_blank" rel="noopener noreferrer">Open official eCFR</a>
+        ${officialUrl
+          ? `<a class="button primary" href="${escapeHtml(officialUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(officialLabel)}</a>`
+          : `<button class="button primary" type="button" disabled>${escapeHtml(officialLabel)}</button>`}
       `;
     }
     if (view === "people") {
@@ -2917,8 +2956,27 @@
   }
 
   function renderPageHeading(view = state.view) {
-    const meta = pageMeta[view] || pageMeta.dashboard;
+    let meta = pageMeta[view] || pageMeta.dashboard;
     const place = activeLocation();
+    if (view === "standards") {
+      const jurisdiction = place ? jurisdictionForLocation(place) : "MULTI";
+      const titles = {
+        "US-OR": "Oregon OSHA manufacturing guide",
+        "US-WA": "Washington DOSH safety reference",
+        "US-CA": "Cal/OSHA safety reference",
+        MULTI: "State OSHA safety reference"
+      };
+      meta = {
+        ...meta,
+        eyebrow: jurisdiction === "US-OR" ? "Oregon manufacturing reference" : "Location-specific regulatory reference",
+        title: titles[jurisdiction] || "Manufacturing safety reference",
+        description: jurisdiction === "US-OR"
+          ? "Start with Oregon Division 2 general-industry rules prioritized for manufacturing, then trace each source to company controls and retained evidence."
+          : jurisdiction === "MULTI"
+            ? "Choose a location before treating any state-plan rule as primary; Oregon, Washington, and California each retain their own authority."
+            : "Use the selected location's state-plan sources as primary and the federal catalog only as a documented baseline."
+      };
+    }
     const eyebrow = place && view !== "locations" ? `${place.name} · ${meta.eyebrow}` : meta.eyebrow;
     return `
       <section class="page-heading">
@@ -5398,8 +5456,11 @@
   }
 
   function standardsForAuthority() {
+    const crossJurisdictionSearch = state.locationId === "all"
+      && state.standardAuthority === "combined"
+      && Boolean(state.standardQuery.trim());
     const jurisdictions = state.locationId === "all"
-      ? [...new Set(data.locations.map(jurisdictionForLocation))]
+      ? (crossJurisdictionSearch ? [...new Set(data.locations.map(jurisdictionForLocation))] : [])
       : [jurisdictionForLocation(activeLocation())];
     const stateJurisdictions = jurisdictions.filter((jurisdiction) =>
       !["US-FED", "US-FED-OSHA"].includes(jurisdiction)
@@ -5419,10 +5480,54 @@
 
     if (state.standardAuthority === "federal") return federalStandards;
     if (state.standardAuthority === "combined") return [...stateStandards, ...federalStandards];
+    if (!jurisdictions.length) return [];
     if (jurisdictions.some((jurisdiction) => ["US-FED", "US-FED-OSHA"].includes(jurisdiction))) {
       return [...stateStandards, ...federalStandards];
     }
     return stateStandards.length ? stateStandards : federalStandards;
+  }
+
+  const federalManufacturingPriorities = new Map([
+    ["1910.212", 10], ["1910.147", 20], ["1910.178", 30], ["1910.242", 35],
+    ["1910.243", 36], ["1910.179", 40], ["1910.184", 41], ["1910.95", 50],
+    ["1910.252", 60], ["1910.254", 61], ["1910.255", 62], ["1910.94", 65],
+    ["1910.1000", 66], ["1910.134", 70], ["1910.1200", 90], ["1910.303", 100],
+    ["1910.304", 101], ["1910.305", 102], ["1910.332", 103], ["1910.333", 104],
+    ["1910.22", 110], ["1910.28", 111], ["1910.29", 112], ["1910.30", 113],
+    ["1910.38", 120], ["1910.39", 121], ["1910.176", 130], ["1910.106", 165],
+    ["1910.215", 11], ["1910.217", 12], ["1910.218", 13], ["1910.219", 14],
+    ["1904.29", 140], ["1904.32", 141], ["1904.33", 142], ["1904.39", 143],
+    ["1904.41", 144], ["osh-act-5-a-1", 170]
+  ]);
+
+  function standardScopeCategory(standard) {
+    return standard.scopeCategory || standard.scope || "Other";
+  }
+
+  function isManufacturingReference(standard) {
+    if (standard.catalogType === "state") {
+      return (standard.focusTags || []).includes("manufacturing");
+    }
+    return federalManufacturingPriorities.has(standard.identifier);
+  }
+
+  function isPriorityReference(standard) {
+    if (isManufacturingReference(standard)) return true;
+    return standard.catalogType === "state" && standard.jurisdiction !== "US-OR" && standard.featured;
+  }
+
+  function manufacturingPriorityFor(standard) {
+    if (Number.isFinite(standard.focusPriority)) return standard.focusPriority;
+    return federalManufacturingPriorities.get(standard.identifier) ?? 9999;
+  }
+
+  function manufacturingProfileConfirmed(location) {
+    if (!location || location.regulatoryProfileStatus !== "approved") return false;
+    const naicsConfirmed = location.regulatoryOperationFacts?.industry_and_naics_confirmed === true;
+    const manufacturingNaics = (location.regulatoryNaicsCodes || []).some((code) =>
+      /^(31|32|33)/.test(String(code).replace(/\D/g, ""))
+    );
+    return naicsConfirmed && manufacturingNaics;
   }
 
   function standardGroupOptions(standards) {
@@ -5444,9 +5549,9 @@
   function filteredStandards() {
     const query = state.standardQuery.trim().toLowerCase();
     return standardsForAuthority().filter((standard) => {
-      if (state.standardMode === "featured" && !query && !standard.featured) return false;
+      if (state.standardMode === "manufacturing" && !query && !isPriorityReference(standard)) return false;
       if (state.standardPart !== "all" && (standard.groupCode || standard.part) !== state.standardPart) return false;
-      if (state.standardScope !== "all" && standard.scope !== state.standardScope) return false;
+      if (state.standardScope !== "all" && standardScopeCategory(standard) !== state.standardScope) return false;
       if (!query) return true;
       const haystack = [
         standard.citation,
@@ -5460,10 +5565,22 @@
         standard.authority,
         standard.jurisdiction,
         standard.scope,
+        standard.scopeCategory,
         standard.summary,
-        ...(standard.topics || [])
+        standard.authorityType,
+        standard.changeNote,
+        ...(standard.topics || []),
+        ...(standard.focusTags || []),
+        ...(standard.workAreas || []),
+        ...(standard.equipment || [])
       ].filter(Boolean).join(" ").toLowerCase();
       return haystack.includes(query);
+    }).sort((left, right) => {
+      const catalogOrder = (left.catalogType === "state" ? 0 : 1) - (right.catalogType === "state" ? 0 : 1);
+      if (catalogOrder) return catalogOrder;
+      const priorityOrder = manufacturingPriorityFor(left) - manufacturingPriorityFor(right);
+      if (priorityOrder) return priorityOrder;
+      return String(left.citation).localeCompare(String(right.citation), undefined, { numeric: true });
     });
   }
 
@@ -5471,22 +5588,64 @@
     const results = filteredStandards();
     const visibleResults = results.slice(0, 80);
     const authorityStandards = standardsForAuthority();
-    const scopes = [...new Set(authorityStandards.map((standard) => standard.scope).filter(Boolean))].sort();
+    const scopes = [...new Set(authorityStandards.map(standardScopeCategory).filter(Boolean))].sort();
     const groups = standardGroupOptions(authorityStandards);
     const plans = applicableJurisdictions();
-    const locationLabel = activeLocation()?.name || allLocationsLabel();
+    const selectedLocation = activeLocation();
+    const selectedJurisdiction = selectedLocation ? jurisdictionForLocation(selectedLocation) : "MULTI";
+    const locationLabel = selectedLocation?.name || allLocationsLabel();
     const context = locationRegulatoryContext();
-    const coreSnapshots = regulatory.partSnapshots?.length || 0;
     const stateResultCount = authorityStandards.filter((standard) => standard.catalogType === "state").length;
     const federalResultCount = authorityStandards.filter((standard) => standard.catalogType === "federal").length;
-    const statusTitle = state.standardAuthority === "federal"
-      ? "Federal OSHA baseline indexed"
-      : state.standardAuthority === "combined"
-        ? "State authority and federal baseline shown together"
-        : "Controlling rules follow the selected location";
-    const statusDetail = state.standardAuthority === "federal"
-      ? `eCFR Title 29, Chapter XVII is current through ${regulatory.meta.currentThrough || "unavailable"}.`
-      : `${stateResultCount} curated state rule records are linked to official sources checked ${stateRegulatory.meta.checkedOn || "2026-07-30"}; exact source snapshots and legal crosswalks remain under review.`;
+    const stateCheckedOn = selectedJurisdiction === "MULTI"
+      ? "see each result"
+      : authorityStandards.find((standard) => standard.catalogType === "state")?.checkedOn
+        || stateRegulatory.meta.jurisdictionCheckedOn?.[selectedJurisdiction]
+        || stateRegulatory.meta.checkedOn;
+    const manufacturingResultCount = authorityStandards.filter(isManufacturingReference).length;
+    const priorityResultCount = authorityStandards.filter(isPriorityReference).length;
+    const profileConfirmed = manufacturingProfileConfirmed(selectedLocation);
+    const isOregonContext = selectedJurisdiction === "US-OR";
+    const selectedAuthorityLabel = selectedJurisdiction === "MULTI"
+      ? "Location-specific state plans"
+      : jurisdictionLabel(selectedJurisdiction);
+    const requiresLocation = selectedJurisdiction === "MULTI" && state.standardAuthority === "location";
+    const crossJurisdictionSearch = selectedJurisdiction === "MULTI"
+      && state.standardAuthority === "combined"
+      && Boolean(state.standardQuery.trim());
+    const priorityModeStem = isOregonContext || state.standardAuthority === "federal"
+      ? "manufacturing priorit"
+      : "curated priorit";
+    const statusTitle = crossJurisdictionSearch
+      ? "Cross-jurisdiction research results"
+      : requiresLocation
+      ? "Choose a location before using state rules"
+      : state.standardAuthority === "federal"
+        ? "Federal OSHA baseline indexed for comparison"
+        : state.standardAuthority === "combined"
+          ? `${selectedAuthorityLabel} and federal baseline shown together`
+          : `${selectedAuthorityLabel} is primary for this location`;
+    const statusDetail = crossJurisdictionSearch
+      ? "Results retain their Oregon, Washington, California, or federal label. Select a location before treating any state rule as primary."
+      : requiresLocation
+      ? "The company spans Oregon, Washington, and California; a blended list cannot identify a controlling state authority."
+      : state.standardAuthority === "federal"
+        ? `eCFR Title 29, Chapter XVII is current through ${regulatory.meta.currentThrough || "unavailable"}.`
+        : `${stateResultCount} curated ${selectedAuthorityLabel} reference records link to official sources checked ${stateCheckedOn || "not recorded"}; the catalog is not complete.`;
+    const priorityTopics = [
+      ["Machine guarding", "machine guarding"],
+      ["Lockout/tagout", "lockout tagout"],
+      ["Forklifts", "forklift"],
+      ["Cranes & slings", "crane"],
+      ["Noise", "noise"],
+      ["Welding & hot work", "welding"],
+      ["Respiratory", "respiratory"],
+      ["PPE", "PPE"],
+      ["HazCom & SDS", "hazard communication"],
+      ["Electrical", "electrical"],
+      ["Walking surfaces", "walking-working surfaces"],
+      ["Emergency & fire", "emergency action plan"]
+    ];
 
     return `
       ${renderPageHeading()}
@@ -5499,22 +5658,54 @@
             <span>${escapeHtml(statusDetail)}</span>
           </div>
         </div>
-        <span class="binding-badge ${state.standardAuthority === "federal" ? "regulation" : "state-plan"}">${authorityStandards.length.toLocaleString()} in view</span>
+        <span class="binding-badge ${state.standardAuthority === "federal" ? "regulation" : "state-plan"}">${requiresLocation ? "Location required" : `${state.standardMode === "manufacturing" ? priorityResultCount : authorityStandards.length.toLocaleString()} indexed`}</span>
       </section>
 
       <div class="trace-banner">
         <span class="trace-label">Reference guide</span>
         <div>
-          <strong>Use this library to research and trace controls—not to make an automatic compliance determination.</strong>
-          <p>For Oregon, Washington, and California locations, the state program is primary. Federal OSHA remains the baseline and controls only where the state adopts it or federal jurisdiction is retained.</p>
+          <strong>${escapeHtml(stateRegulatory.meta.completenessNotice || "Use this library to research and trace controls—not to make an automatic compliance determination.")}</strong>
+          <p>${isOregonContext ? "Oregon OSHA Division 2 is the primary general-industry source for this Oregon location. Federal citations are shown as adopted-source context, not as a substitute for the current Oregon rule." : "For Oregon, Washington, and California locations, the selected state program is primary. Federal OSHA remains a baseline and retained-jurisdiction reference."}</p>
         </div>
       </div>
 
+      ${isOregonContext ? `
+        <section class="manufacturing-focus-card" aria-labelledby="oregon-manufacturing-title">
+          <div class="manufacturing-focus-header">
+            <div>
+              <p class="section-kicker">Manufacturing priorities</p>
+              <h2 id="oregon-manufacturing-title">Oregon OSHA · Division 2 general industry</h2>
+              <p>Ordered for metal-manufacturing work such as forming, shearing, press braking, welding, finishing, material handling, and machine servicing. Ordering is a research aid—not an applicability decision.</p>
+            </div>
+            ${statusPill(profileConfirmed ? "Manufacturing profile reviewed" : "Industry profile review required", profileConfirmed ? "green" : "amber")}
+          </div>
+          <div class="context-chip-row" aria-label="Oregon guide context">
+            <span>Oregon OSHA primary</span>
+            <span>General industry · Division 2</span>
+            <span>Manufacturing focus</span>
+            <span>Official links checked ${escapeHtml(stateRegulatory.meta.checkedOn || "2026-08-06")}</span>
+          </div>
+          <div class="manufacturing-topic-grid" aria-label="Priority manufacturing topics">
+            ${priorityTopics.map(([label, query]) => `<button type="button" data-action="standards-topic" data-query="${escapeHtml(query)}">${escapeHtml(label)}</button>`).join("")}
+          </div>
+          <a href="https://osha.oregon.gov/rules/final/pages/division-2.aspx" target="_blank" rel="noopener noreferrer">Open the complete official Oregon OSHA Division 2 rulebook</a>
+          <a href="https://osha.oregon.gov/OSHARules/pd/pd-278.pdf" target="_blank" rel="noopener noreferrer">Open Oregon's metal-fabrication hazard profile (official guidance)</a>
+        </section>
+      ` : requiresLocation ? `
+        <section class="manufacturing-focus-card location-required-card">
+          <div>
+            <p class="section-kicker">Location required</p>
+            <h2>Choose an Oregon location for the Oregon manufacturing guide</h2>
+            <p>The all-location view is a jurisdiction rollup. Select a specific location before treating any state plan as primary.</p>
+          </div>
+        </section>
+      ` : ""}
+
       <section class="split-summary" aria-label="Regulatory library metrics">
-        <article class="summary-card"><span>State rules in this view</span><strong>${stateResultCount.toLocaleString()}</strong></article>
+        <article class="summary-card"><span>Curated state references</span><strong>${stateResultCount.toLocaleString()}</strong></article>
+        <article class="summary-card"><span>${isOregonContext || state.standardAuthority === "federal" ? "Manufacturing priorities" : "Curated priority references"}</span><strong>${(isOregonContext || state.standardAuthority === "federal" ? manufacturingResultCount : priorityResultCount).toLocaleString()}</strong></article>
         <article class="summary-card"><span>Federal baseline in this view</span><strong>${federalResultCount.toLocaleString()}</strong></article>
         <article class="summary-card"><span>Reviewed control links</span><strong>${regulatory.regulatoryLinks.length}</strong></article>
-        <article class="summary-card"><span>Raw core-part fingerprints</span><strong>${coreSnapshots}</strong></article>
       </section>
 
       <section class="jurisdiction-banner">
@@ -5556,16 +5747,16 @@
             <span>Location rules are primary; use the other views for federal research and cross-reference.</span>
           </div>
           <div class="tabs" role="tablist" aria-label="Regulatory authority view">
-            <button class="tab ${state.standardAuthority === "location" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardAuthority === "location"}" data-action="standards-authority" data-authority="location">Location rules</button>
+            <button class="tab ${state.standardAuthority === "location" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardAuthority === "location"}" data-action="standards-authority" data-authority="location" ${selectedJurisdiction === "MULTI" ? "disabled" : ""}>${isOregonContext ? "Oregon rules" : "Location rules"}</button>
             <button class="tab ${state.standardAuthority === "federal" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardAuthority === "federal"}" data-action="standards-authority" data-authority="federal">Federal baseline</button>
-            <button class="tab ${state.standardAuthority === "combined" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardAuthority === "combined"}" data-action="standards-authority" data-authority="combined">Combined</button>
+            <button class="tab ${state.standardAuthority === "combined" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardAuthority === "combined"}" data-action="standards-authority" data-authority="combined" ${selectedJurisdiction === "MULTI" ? "disabled" : ""}>Combined</button>
           </div>
         </div>
         <form id="standards-filter-form">
           <div class="standards-filters">
             <div class="field standards-search-field">
               <label for="standards-query">Search citations, titles, topics, and summaries</label>
-              <input id="standards-query" name="query" type="search" value="${escapeHtml(state.standardQuery)}" placeholder="Try OAR, WAC, Title 8, forklift, heat…">
+              <input id="standards-query" name="query" type="search" value="${escapeHtml(state.standardQuery)}" placeholder="Try press brake, shear, roll former, forklift, manganese…">
             </div>
             <div class="field">
               <label for="standards-part">Rule group</label>
@@ -5585,9 +5776,9 @@
             </div>
             <button class="button primary standards-search-button" type="submit">Search guide</button>
           </div>
-          <div class="tabs" aria-label="Reference result mode">
-            <button class="tab ${state.standardMode === "featured" ? "active" : ""}" type="button" data-action="standards-mode" data-mode="featured">High-use standards</button>
-            <button class="tab ${state.standardMode === "all" ? "active" : ""}" type="button" data-action="standards-mode" data-mode="all">${state.standardAuthority === "federal" ? "Entire federal chapter" : "All catalog records"}</button>
+          <div class="tabs" role="tablist" aria-label="Reference result mode">
+            <button class="tab ${state.standardMode === "manufacturing" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardMode === "manufacturing"}" data-action="standards-mode" data-mode="manufacturing">${isOregonContext || state.standardAuthority === "federal" ? "Manufacturing priorities" : "Curated priorities"}</button>
+            <button class="tab ${state.standardMode === "all" ? "active" : ""}" type="button" role="tab" aria-selected="${state.standardMode === "all"}" data-action="standards-mode" data-mode="all">${state.standardAuthority === "federal" ? "Entire federal chapter" : isOregonContext ? "All indexed Oregon sources" : "All indexed state sources"}</button>
           </div>
         </form>
       </section>
@@ -5596,8 +5787,8 @@
         <div class="standards-results">
           <div class="table-header">
             <div>
-              <h2>${results.length.toLocaleString()} matching provision${results.length === 1 ? "" : "s"}</h2>
-              <p>${results.length > visibleResults.length ? `Showing the first ${visibleResults.length.toLocaleString()}; refine the search to narrow the corpus.` : "Every result links back to its official source."}</p>
+              <h2>${results.length.toLocaleString()} ${state.standardMode === "manufacturing" && !state.standardQuery.trim() ? priorityModeStem : "matching provision"}${results.length === 1 ? (state.standardMode === "manufacturing" && !state.standardQuery.trim() ? "y" : "") : (state.standardMode === "manufacturing" && !state.standardQuery.trim() ? "ies" : "s")}</h2>
+              <p>${results.length > visibleResults.length ? `Showing the first ${visibleResults.length.toLocaleString()}; refine the search to narrow the corpus.` : results.length ? "Every result links back to an official source; manufacturing order does not establish applicability." : "Choose a location or broaden the filters."}</p>
             </div>
           </div>
           <div class="standard-result-list">
@@ -5608,15 +5799,26 @@
                     <div class="standard-meta">
                       <span class="binding-badge ${escapeHtml(standard.bindingLevel)}">${escapeHtml(standard.bindingLevel)}</span>
                       <span class="binding-badge ${standard.catalogType === "state" ? "state-plan" : "regulation"}">${escapeHtml(standard.jurisdiction || "US-FED")}</span>
-                      <span>${escapeHtml(standard.scope)}</span>
+                      <span>${escapeHtml(standardScopeCategory(standard))}</span>
                       ${standard.subpart ? `<span>Subpart ${escapeHtml(standard.subpart)}</span>` : ""}
                     </div>
                     <h3>${escapeHtml(standard.citation)}</h3>
                     <p class="standard-title">${escapeHtml(standard.title)}</p>
                   </div>
-                  ${standard.featured ? `<span class="status-pill purple">High use</span>` : ""}
+                  ${isManufacturingReference(standard)
+                    ? `<span class="status-pill purple">Manufacturing priority</span>`
+                    : isPriorityReference(standard)
+                      ? `<span class="status-pill blue">Curated priority</span>`
+                      : ""}
                 </div>
                 <p>${escapeHtml(standard.summary || standard.partTitle || "Official provision indexed from the eCFR structure.")}</p>
+                ${standard.catalogType === "state" ? `
+                  <div class="standard-context-row">
+                    <span>${escapeHtml(standard.authorityType || "State-plan reference")}</span>
+                    <span>Candidate · applicability review required</span>
+                    ${(standard.workAreas || []).slice(0, 3).map((area) => `<span>${escapeHtml(area)}</span>`).join("")}
+                  </div>
+                ` : ""}
                 <div class="standard-card-footer">
                   <span>${standard.catalogType === "state"
                     ? `Official state source checked ${escapeHtml(standard.checkedOn || stateRegulatory.meta.checkedOn || "not recorded")} · source snapshot pending`
@@ -5627,7 +5829,7 @@
                   </div>
                 </div>
               </article>
-            `).join("") : renderEmptyState("§", "No standards found", "Try a broader citation, topic, part, or scope.")}
+            `).join("") : renderEmptyState("§", requiresLocation ? "Choose a location" : "No standards found", requiresLocation ? "State-plan authority is location-specific. Use the location control above to open the Oregon, Washington, or California guide." : "Try a broader citation, topic, part, or scope.")}
           </div>
         </div>
 
@@ -5646,7 +5848,7 @@
             <div class="source-fingerprint compact pending">
               <strong>State source snapshots</strong>
               <code>Pending server-side ingestion</code>
-              <span>Official links checked ${escapeHtml(stateRegulatory.meta.checkedOn || "not recorded")} · human crosswalk required</span>
+              <span>Official links checked ${escapeHtml(stateCheckedOn || "not recorded")} · human crosswalk required</span>
             </div>
           ` : ""}
           <div class="source-fingerprint compact">
@@ -6633,7 +6835,12 @@
       state.standardAuthority = "combined";
       state.standardPart = "all";
       state.standardScope = "all";
-      localStorage.setItem(`${uiStoragePrefix}standardAuthority`, state.standardAuthority);
+    } else if (view === "standards") {
+      state.standardQuery = "";
+      state.standardMode = "manufacturing";
+      state.standardAuthority = "location";
+      state.standardPart = "all";
+      state.standardScope = "all";
     }
     state.view = view;
     state.sidebarOpen = false;
@@ -7815,8 +8022,18 @@
     }
 
     if (action === "standards-mode") {
-      state.standardMode = target.dataset.mode === "all" ? "all" : "featured";
+      state.standardMode = target.dataset.mode === "all" ? "all" : "manufacturing";
       render();
+      return;
+    }
+
+    if (action === "standards-topic") {
+      state.standardQuery = target.dataset.query || "";
+      state.standardMode = "all";
+      state.standardPart = "all";
+      state.standardScope = "all";
+      render();
+      requestAnimationFrame(() => document.querySelector("#standards-query")?.focus());
       return;
     }
 
@@ -7827,7 +8044,6 @@
         : "location";
       state.standardPart = "all";
       state.standardScope = "all";
-      localStorage.setItem(`${uiStoragePrefix}standardAuthority`, state.standardAuthority);
       render();
       return;
     }
@@ -8152,6 +8368,8 @@
     if (event.target.id === "location-select") {
       state.locationId = event.target.value;
       if (state.view === "standards") {
+        state.standardAuthority = "location";
+        state.standardMode = "manufacturing";
         state.standardPart = "all";
         state.standardScope = "all";
       }

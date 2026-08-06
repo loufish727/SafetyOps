@@ -28,14 +28,14 @@ The browser implementation, eighteen ordered migrations, and three Edge Function
   readable/signable documents, and the administrator-focused import/source archive;
   source originals retain provenance without becoming the everyday work menu
 - Full structural eCFR index for 29 CFR Chapter XVII, current through 2026-07-29
-- Curated high-use Oregon OSHA, Washington DOSH, and Cal/OSHA starter references
+- Oregon OSHA Division 2 manufacturing priorities plus location-specific Washington DOSH and Cal/OSHA starter references
 - Location regulatory profiles, jurisdiction assignments, applicability assessments, approved control mappings, and evidence lineage
 - Idempotent database-side inspection submission with immutable regulatory context; draft or review-required profiles degrade to `review_required` with zero compliance-evidence links
 - Database-authoritative auditor, personnel-visibility, inspection-identity, active-membership, current-applicability, signature, and final form-evidence controls in migration `010`; the browser supplies only pinned signature entity IDs while PostgreSQL derives signer identity/role, method, intent, timestamp, unsigned-payload digest, signature record, and signature hash
 - Service-only invite-owner bootstrap, retirement of both browser self-onboarding RPCs, single-active-company membership, attributable membership audit, last-administrator protection, state-aware location creation, database-derived jurisdiction review, and resolved-jurisdiction program gating in migration `011`
 - Row Level Security, immutable version records, append-only audit records, and private Storage design
 - Bounded browser queries, with explicit server pagination still required before large-scale use
-- Responsive desktop/mobile interface; the latest full local Playwright run completed with 97 passed, 7 conditional/project skips, and 0 failures
+- Responsive desktop/mobile interface; the latest full local Playwright run completed with 106 passed, 8 conditional/project skips, and 0 failures
 - GitHub Pages build and deployment workflow
 
 Some administrative workflows remain intentionally unavailable until their server-side services are deployed. In particular, SafetyOps does **not** yet provide a production form-original upload service. The checked-in `sign-form-file` Edge Function authorizes downloads of already committed, verified form originals; it is not an upload, quarantine, malware-scan, or commit service. The separate employee-PDF service provides short-lived upload sessions, exact-size/SHA-256 verification, recoverable processing leases, quarantine, and a service-only scan attestation bound to the stored hash. It releases a PDF only when a configured trusted scanner reports those exact bytes `clean`; with no scanner configured, the document remains non-releasable with malware status `unavailable`. Development-only local upload staging is disabled by default and is never the production system of record.
@@ -157,7 +157,7 @@ Production upload remains a separate required service. No live prepare, quaranti
 
 ## Regulatory and safety notice
 
-SafetyOps is designed to preserve source versions, review decisions, and evidence lineage; it does not independently determine regulatory applicability or certify compliance. The 30 state records are deliberately curated high-use references, not a complete state corpus. Public summaries are starting points, not substitutes for current official rule text, applicable exceptions, qualified safety professionals, or legal advice.
+SafetyOps is designed to preserve source versions, review decisions, and evidence lineage; it does not independently determine regulatory applicability or certify compliance. The 44 state records are deliberately curated references: 24 Oregon records, including 23 manufacturing-focused priorities, plus 10 Washington and 10 California starter records. They are not a complete state corpus. Public summaries are starting points, not substitutes for current official rule text, applicable exceptions, qualified safety professionals, or legal advice.
 
 The eCFR is continuously updated and is not the official legal edition of the CFR. Oregon, Washington, California, and federal sources must be monitored and re-reviewed when they change. A source update creates review work; it must never silently rewrite an approved company control or historical record.
 

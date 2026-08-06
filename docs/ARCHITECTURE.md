@@ -46,9 +46,11 @@ tenant-isolation matrix, configured scanner behavior, or complete workflows.
   only when explicit development flags are enabled.
 - `osha-reference.js` contains the full 1,547-record structural index for eCFR
   29 CFR Chapter XVII with `currentThrough: 2026-07-29`.
-- `state-osha-reference.js` contains 10 curated records each for Oregon,
-  Washington, and California. Its official links were checked 2026-07-30, but
-  it explicitly claims no source-content hash or complete legal coverage.
+- `state-osha-reference.js` contains 24 curated Oregon records, including 23
+  manufacturing-focused priorities, plus 10 Washington and 10 California
+  starter records. Oregon official links were checked 2026-08-06; the
+  Washington and California starter-link check date remains 2026-07-30. It
+  explicitly claims no source-content hash or complete legal coverage.
 - `scripts/build-static.js` creates the allowlisted `dist` artifact.
 - `scripts/verify-public-build.mjs` checks empty tenant seeds, tenant-free
   regulatory mappings, the exact 12-file `dist` allowlist, and the complete
@@ -226,7 +228,8 @@ until the profile, jurisdiction, applicability assessment, exact mapping,
 requirement, and release are reviewed, approved, published, and effective.
 
 The federal artifact is a full structural/link index as of 2026-07-29. The
-state artifact is deliberately a 30-record curated high-use catalog, not a
+state artifact is deliberately a 44-record curated catalog with an Oregon
+manufacturing-first index, not a
 complete state corpus, and claims no state source-byte hash. Qualified review
 and controlled source snapshots remain required. Nothing in the reference
 layer is an LFES or regulatory compliance certification.
