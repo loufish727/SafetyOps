@@ -47,6 +47,16 @@ async function requirePrivateLibrary(page) {
   test.skip(!hasPrivateFixture, "Requires an ignored private tenant fixture.");
 }
 
+async function expandDriveArchiveFolders(page) {
+  const library = page.locator('.import-folder-library[aria-label="Drive folder library"]');
+  await expect(library).toBeVisible();
+  await library.locator("details").evaluateAll((folders) => {
+    folders.forEach((folder) => {
+      folder.open = true;
+    });
+  });
+}
+
 test("private safety program library exposes source trace and folders", async ({ page }, testInfo) => {
   await openProgramLibrary(page, testInfo.project.name);
   await requirePrivateLibrary(page);
@@ -201,6 +211,7 @@ test("Drive archive review shows full original trace and classification filters"
   await openProgramLibrary(page, testInfo.project.name);
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
   await page.getByRole("tab", { name: /Drive archive review/ }).click();
+  await expandDriveArchiveFolders(page);
 
   await expect(page.getByRole("heading", { level: 2, name: "Drive archive review" })).toBeVisible();
   await expect(page.getByText("7 source items · 4 verified original PDFs · 26 verified PDF pages", { exact: true })).toBeVisible();
@@ -284,6 +295,8 @@ test("Drive archive folders organize originals into browsable categories", async
   );
   await expect(jha.locator(":scope > .import-folder-summary > .import-folder-count"))
     .toHaveText("2 files");
+  await expect(jha).not.toHaveAttribute("open", "");
+  await jha.locator(":scope > .import-folder-summary").click();
   await expect(jha).toHaveAttribute("open", "");
 
   const northPlant = jha.locator(
@@ -291,6 +304,8 @@ test("Drive archive folders organize originals into browsable categories", async
   );
   await expect(northPlant.locator(":scope > .import-folder-summary > .import-folder-count"))
     .toHaveText("2 files");
+  await expect(northPlant).not.toHaveAttribute("open", "");
+  await northPlant.locator(":scope > .import-folder-summary").click();
   await expect(northPlant).toHaveAttribute("open", "");
   await expect(northPlant.locator(
     ":scope > .import-folder-children > .import-folder-category > .import-folder-summary > .import-folder-title"
@@ -301,6 +316,8 @@ test("Drive archive folders organize originals into browsable categories", async
   );
   await expect(departmentA.locator(":scope > .import-folder-summary > .import-folder-count"))
     .toHaveText("2 files");
+  await expect(departmentA).not.toHaveAttribute("open", "");
+  await departmentA.locator(":scope > .import-folder-summary").click();
   await expect(departmentA).toHaveAttribute("open", "");
   await expect(departmentA.locator(
     ":scope > .import-folder-children > .import-folder-file-grid > .import-candidate-card h3"
@@ -353,6 +370,12 @@ test("Drive archive folders organize originals into browsable categories", async
   );
   await expect(spanishJha.locator(":scope > .import-folder-summary > .import-folder-count"))
     .toHaveText("1 file");
+  await expect(spanishJha).not.toHaveAttribute("open", "");
+  await spanishJha.locator(":scope > .import-folder-summary").click();
+  await expect(spanishNorthPlant).not.toHaveAttribute("open", "");
+  await spanishNorthPlant.locator(":scope > .import-folder-summary").click();
+  await expect(machineShop).not.toHaveAttribute("open", "");
+  await machineShop.locator(":scope > .import-folder-summary").click();
   await expect(machineShop.locator(".import-candidate-card h3"))
     .toHaveText(["Guarding Evidence Photo.jpg"]);
 
@@ -379,6 +402,7 @@ test("Drive archive secure download authorizes by candidate id", async ({ page }
   await openProgramLibrary(page, testInfo.project.name);
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
   await page.getByRole("tab", { name: /Drive archive review/ }).click();
+  await expandDriveArchiveFolders(page);
 
   const card = page.locator(".import-candidate-card").filter({
     hasText: "Hazard Assessment Checklist.pdf"
@@ -400,6 +424,7 @@ test("Drive archive never certifies a PDF from its filename alone", async ({ pag
   await openProgramLibrary(page, testInfo.project.name);
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
   await page.getByRole("tab", { name: /Drive archive review/ }).click();
+  await expandDriveArchiveFolders(page);
 
   await expect(page.getByText("8 source items · 4 verified original PDFs · 26 verified PDF pages", { exact: true })).toBeVisible();
   const mislabeled = page.locator(".import-candidate-card").filter({ hasText: "Mislabeled Photo.pdf" });
@@ -411,6 +436,7 @@ test("Drive archive rejects mismatched download metadata", async ({ page }, test
   await openProgramLibrary(page, testInfo.project.name);
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
   await page.getByRole("tab", { name: /Drive archive review/ }).click();
+  await expandDriveArchiveFolders(page);
 
   const card = page.locator(".import-candidate-card").filter({
     hasText: "Hazard Assessment Checklist.pdf"
@@ -443,6 +469,7 @@ test("Drive company access is visible to ordinary authorized company members", a
   const archiveTab = page.getByRole("tab", { name: /Company originals/ });
   await expect(archiveTab).toBeVisible();
   await archiveTab.click();
+  await expandDriveArchiveFolders(page);
 
   await expect(page.getByText(
     /available to authenticated company members; original files are never public/i
@@ -484,6 +511,7 @@ test("Drive archive review controls update scope and status for safety managers"
   const archiveTab = page.getByRole("tab", { name: /Drive archive review/ });
   await expect(archiveTab).toBeVisible();
   await archiveTab.click();
+  await expandDriveArchiveFolders(page);
   await expect(page.locator(".import-candidate-card")).toHaveCount(7);
 
   const card = page.locator(".import-candidate-card").filter({
@@ -520,6 +548,7 @@ test("Drive restricted candidates cannot be made company visible", async ({ page
   await openProgramLibrary(page, testInfo.project.name);
   await page.locator('[data-action="program-category"][data-category="forms"]').click();
   await page.getByRole("tab", { name: /Drive archive review/ }).click();
+  await expandDriveArchiveFolders(page);
 
   const restrictedCard = page.locator(".import-candidate-card").filter({
     hasText: "Signed JHA - July.pdf"

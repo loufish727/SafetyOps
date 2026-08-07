@@ -4,8 +4,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 429452,
-      "sha256": "7e1966ef54470d9c37eacfde7a197f90159848985fe602c2669203e050e6f9de"
+      "bytes": 429408,
+      "sha256": "519624885124f204310c67c7c26d3d5a571dce8bc1da6c085507b427c8f59307"
     },
     {
       "path": "data.js",
@@ -63,7 +63,7 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "aggregateSha256": "3ca0df8dd992cdb4f0d4be225b6177639b13c09a27c97688a7471b44cf128a14",
+  "aggregateSha256": "3a777f4b320d27c5d2ab31a750a52847c0d9dea645a1ca417c4ccae9f2fa7f23",
   "releaseFiles": [
     {
       "path": ".github/workflows/deploy-pages.yml",
@@ -77,8 +77,8 @@
     },
     {
       "path": "app.js",
-      "bytes": 429452,
-      "sha256": "7e1966ef54470d9c37eacfde7a197f90159848985fe602c2669203e050e6f9de"
+      "bytes": 429408,
+      "sha256": "519624885124f204310c67c7c26d3d5a571dce8bc1da6c085507b427c8f59307"
     },
     {
       "path": "data.js",
@@ -447,8 +447,8 @@
     },
     {
       "path": "tests/safety-programs.spec.js",
-      "bytes": 27742,
-      "sha256": "20b25833df5b965c3d23101ee90db4a046c21fe7be38702918e4ecd679c454cd"
+      "bytes": 29139,
+      "sha256": "778f8a9bd7431610eda2ca654824025b811b92d2ffad58f85bf5dcc750140ec8"
     },
     {
       "path": "tests/safety-workflows.spec.js",
@@ -466,5 +466,5 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "releaseAggregateSha256": "3aee4ed85af4cf314043489cbe5c42b1f6e7d1ebd7328c40d22804756db53d72"
+  "releaseAggregateSha256": "8476a8f0a568c0635cef8f9d0881eb1e6fc6f1f653560a0226bb85a55c723ffb"
 }
