@@ -4385,10 +4385,10 @@
             </div>
           ` : ""}
           ${childFolderCount
-            ? node.children.map((child, index) => renderImportCandidateFolder(child, {
+            ? node.children.map((child) => renderImportCandidateFolder(child, {
                 depth: depth + 1,
                 parentPath: folderPath,
-                openBranch: Boolean(options.openBranch && index === 0),
+                openBranch: false,
                 expandAll: options.expandAll
               })).join("")
             : ""}
