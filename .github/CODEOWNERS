@@ -1,0 +1,13 @@
+# Louie reviews backend changes and retains control of live Supabase operations.
+# GitHub requests code-owner review when a non-draft pull request touches these
+# paths. Required code-owner review must also be enabled in branch protection.
+/supabase/ @loufish727
+/supabase-config* @loufish727
+/docs/supabase-change-requests/ @loufish727
+/docs/DEVELOPMENT_HANDOFF.md @loufish727
+/AGENTS.md @loufish727
+/.github/ @loufish727
+/public-build-attestation* @loufish727
+/scripts/verify-public-build.mjs @loufish727
+/scripts/generate-public-attestation-key.mjs @loufish727
+/scripts/build-static.js @loufish727

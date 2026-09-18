@@ -8,6 +8,13 @@ browser-storage keys, and evidence/consent version identifiers remain unchanged.
 Historical engineering documentation may still use the SafetyOps name. This is
 a presentation change, not a tenant-data migration or a change to signed records.
 
+The development home is [Taylor-Metal-Products/Taylor-Safe](https://github.com/Taylor-Metal-Products/Taylor-Safe).
+Contributors and their AI assistants must read [AGENTS.md](AGENTS.md) and the
+[development handoff](docs/DEVELOPMENT_HANDOFF.md) before making changes. Wes leads
+application development; Louie alone implements hosted Supabase updates and
+retains the private release-signing inputs. Backend proposals go through a pull
+request for Louie's review; merging code never authorizes a live backend update.
+
 The public application starts empty. It does not ship a fictional company, locations, workers, incidents, inspections, training records, documents, or tenant control mappings. GitHub Pages hosts the application shell and public regulatory reference metadata; authorized company records and private files belong in Supabase.
 
 The browser implementation, eighteen ordered migrations, and three Edge Functions exist in source. On 2026-08-03, migrations `016` through `018` passed hosted rollback compilation, were applied to the dedicated hosted SafetyOps project, and were recorded in its migration ledger with their reviewed source SHA-256 values. Migration `017` gives 112 reusable internal Drive candidates company access and keeps 11 sensitive or uncertain candidates safety/admin private. Migration `018` derives an immutable, display-safe source collection from frozen import evidence and backfills all 123 originals into `Forms & Appendices` (120) or `Spanish Translations` (3), without exposing raw source paths. The live catalog confirms RLS, scoped grants, and enabled candidate guards; the hardened Drive-ingest function is active. Earlier migrations `013` through `015` remain recorded under their original deployment timestamps, so the ledger still does not prove checksum identity for previously applied files. The full authenticated role matrix, configured malware scanner, Storage recovery, regulatory review, and production operations still require separate proof before broad production use.

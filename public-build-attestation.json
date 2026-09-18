@@ -66,14 +66,29 @@
   "aggregateSha256": "86c3c0d93379910163f8a6e21cd69adea07f9b2390a9b1031bff55051d885543",
   "releaseFiles": [
     {
+      "path": ".github/CODEOWNERS",
+      "bytes": 601,
+      "sha256": "f312e261505e354e703d818cda5f79b471fdef1a4457e62784e434100d947156"
+    },
+    {
+      "path": ".github/pull_request_template.md",
+      "bytes": 1694,
+      "sha256": "5e5e2d38e6096fa730a960194dec736b41db072cc42487b732d63e3386176f74"
+    },
+    {
       "path": ".github/workflows/deploy-pages.yml",
-      "bytes": 1226,
-      "sha256": "d1ba5741fe48146c6f014f6389debfcba776c5cfc3bd5cee93c89bf41d6f8cc6"
+      "bytes": 1787,
+      "sha256": "8adac27ca6e08326ef74dc8caeff2d034a9d3bf3189758a6fe4a645247991971"
     },
     {
       "path": ".gitignore",
       "bytes": 136,
       "sha256": "e9bcdf40006dd1b7b0044385ed16557b38b779a58998aa4c6fa4903c93a26b18"
+    },
+    {
+      "path": "AGENTS.md",
+      "bytes": 4147,
+      "sha256": "3e46761c8b057b638fb6c4176400d1b4e384e41d2295974121e709503c60debf"
     },
     {
       "path": "app.js",
@@ -104,6 +119,11 @@
       "path": "docs/competitive-research.md",
       "bytes": 24153,
       "sha256": "7abc41101ae4ce20398072d9543ba96b884fe0897a98f7cc2a55787c22dfba71"
+    },
+    {
+      "path": "docs/DEVELOPMENT_HANDOFF.md",
+      "bytes": 7546,
+      "sha256": "475a56c7362428c56f9feef8edde2b9e0406464b6952067355c4e15a2597d121"
     },
     {
       "path": "docs/employee-safety-workflows.md",
@@ -232,8 +252,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 17804,
-      "sha256": "8a7f9486a3b0f77314696cecdfe5a1a93c54e8100e454814cbce3eefa568980e"
+      "bytes": 18319,
+      "sha256": "9c48dad101164ecb26a562eb2002037ade6f9ca2358f303ba415464baa8b20ed"
     },
     {
       "path": "safety-program-extracts.js",
@@ -452,8 +472,8 @@
     },
     {
       "path": "tests/calendar.spec.js",
-      "bytes": 21525,
-      "sha256": "cdf77977a49f03550db83a912a1ff856a55138ec1af80af2048bcaef6b814439"
+      "bytes": 21710,
+      "sha256": "e504c098aed34dd32de1a17ed4c0034864e80841e212b88e5e90c927fed464f9"
     },
     {
       "path": "tests/helpers/authenticated-workspace.js",
@@ -482,8 +502,8 @@
     },
     {
       "path": "tests/ux-paths.spec.js",
-      "bytes": 7006,
-      "sha256": "1f406dc7fbae8d1599bddc70c13abf8f0132a1644afbd61adcfc4a9d2a485c09"
+      "bytes": 7221,
+      "sha256": "0f429cdb79d4493ab17c1cc20ebbcaed960886b6a246198c324d673f1d8095d0"
     },
     {
       "path": "vendor/supabase.js",
@@ -491,5 +511,5 @@
       "sha256": "7e94b62086deecef8c0ba3b38f514e2a1944ff6c81d92fb3ff967828c406c38f"
     }
   ],
-  "releaseAggregateSha256": "ea3dd6482d62b0e6898296c7836e4269a31e129ea64c093dad482c63147d30d5"
+  "releaseAggregateSha256": "3ae21a7d014f273634cf5c19533d867259df2d215b4270d06ca0160c653039f9"
 }

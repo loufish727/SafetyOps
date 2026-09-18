@@ -5,6 +5,9 @@ const {
 } = require("./helpers/authenticated-workspace");
 
 async function openStoredView(page, view, heading) {
+  // Startup renders persist the current view; let authenticated loading finish
+  // before setting the next view so it cannot be overwritten before reload.
+  await expect(page.locator(".app-shell")).toBeVisible();
   await page.evaluate((targetView) => {
     localStorage.setItem("safetyops.ui.view", targetView);
   }, view);

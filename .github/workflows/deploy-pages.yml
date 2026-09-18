@@ -1,17 +1,17 @@
-name: Deploy SafetyOps to GitHub Pages
+name: Verify and deploy Taylor Safe
 
 on:
   push:
+    branches: ["main"]
+  pull_request:
     branches: ["main"]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: taylor-safe-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,14 +40,21 @@ jobs:
         run: npm run build
 
       - name: Verify public-data boundary and local approval attestation
+        if: github.event_name != 'pull_request' && (github.repository == 'loufish727/SafetyOps' || vars.TAYLOR_SAFE_PAGES_ENABLED == 'true')
         run: npm run test:public-boundary:ci
 
       - name: Upload Pages artifact
+        if: github.event_name != 'pull_request' && (github.repository == 'loufish727/SafetyOps' || vars.TAYLOR_SAFE_PAGES_ENABLED == 'true')
         uses: actions/upload-pages-artifact@v4
         with:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request' && (github.repository == 'loufish727/SafetyOps' || vars.TAYLOR_SAFE_PAGES_ENABLED == 'true')
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

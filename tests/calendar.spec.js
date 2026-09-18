@@ -232,9 +232,11 @@ test("a crowded day exposes every record through its day panel", async ({ page }
 
 test("keyboard users can inspect event facts and close the detail dialog", async ({ page }) => {
   await showAgenda(page);
+  // Changing views restores focus on the next frame; finish that transition
+  // before targeting an event with the keyboard.
+  await expect(page.getByRole("button", { name: "Agenda", exact: true })).toBeFocused();
   const event = eventFor(page, IDS.action);
-  await event.focus();
-  await page.keyboard.press("Enter");
+  await event.press("Enter");
   const dialog = page.getByRole("dialog", { name: "Tacoma guarding follow-up" });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("Tacoma Distribution");
