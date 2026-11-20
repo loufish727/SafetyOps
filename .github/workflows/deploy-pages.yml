@@ -16,7 +16,8 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # Playwright 1.60 supports Ubuntu 24.04. The default runner switched to 26.04.
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -35,6 +36,11 @@ jobs:
 
       - name: Run responsive application tests
         run: npm test
+
+      - name: Run local feedback email tests
+        run: |
+          node --test supabase/functions/send-feedback/rate-limits.test.mjs
+          npx --yes deno@2.9.6 test --no-lock supabase/functions/send-feedback/handler_test.ts
 
       - name: Build static site
         run: npm run build

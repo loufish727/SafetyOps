@@ -4,6 +4,12 @@
   const app = document.querySelector("#app");
   const toastRegion = document.querySelector("#toast-region");
   const referencePanelRegion = document.querySelector("#reference-panel-region");
+  const feedbackDialog = document.querySelector("#feedback-dialog");
+  const feedbackForm = document.querySelector("#feedback-form");
+  const feedbackMessage = document.querySelector("#feedback-message");
+  const feedbackError = document.querySelector("#feedback-error");
+  const feedbackFailureMessage = "Feedback could not be sent. Your message is still here. Try again.";
+  let feedbackSession = null;
   const source = window.SafetyOpsData || {};
   const data = JSON.parse(JSON.stringify(source));
   const regulatory = window.SafetyOpsRegulatoryData || {
@@ -1006,6 +1012,7 @@
   }
 
   function purgeTenantWorkspace() {
+    closeFeedback(false);
     data.company = null;
     data.currentUser = null;
     data.locations = [];
@@ -2900,6 +2907,7 @@
           </select>
         </label>
         <div class="topbar-actions">
+          <button class="button feedback-trigger" type="button" data-action="open-feedback" aria-haspopup="dialog">Feedback</button>
           <div class="connection-banner" title="Supabase client configured">
             <span class="status-dot" aria-hidden="true"></span>
             <span>Supabase ready</span>
@@ -7341,6 +7349,7 @@
     localStorage.setItem(`${uiStoragePrefix}view`, state.view === "search" ? "dashboard" : state.view);
     localStorage.setItem(`${uiStoragePrefix}location`, state.locationId);
     if (state.authStatus !== "ready") {
+      closeFeedback(false);
       app.innerHTML = renderAuthScreen();
       referencePanelRegion.innerHTML = "";
       return;
@@ -7466,6 +7475,91 @@
     `;
     toastRegion.append(toast);
     window.setTimeout(() => toast.remove(), 4200);
+  }
+
+  function setFeedbackPending(pending) {
+    feedbackMessage.readOnly = pending;
+    const submit = feedbackForm.querySelector('button[type="submit"]');
+    submit.disabled = pending;
+    submit.textContent = pending ? "Sending…" : "Send feedback";
+    feedbackForm.querySelector('[data-action="cancel-feedback"]').disabled = pending;
+  }
+
+  function openFeedback(trigger) {
+    if (!isSignedInCompanyMember() || feedbackDialog.open) return;
+    feedbackSession = {
+      trigger,
+      view: state.view === "search" || Object.hasOwn(pageMeta, state.view) ? state.view : "dashboard",
+      pending: false,
+      request: null
+    };
+    feedbackDialog.showModal();
+  }
+
+  function closeFeedback(restoreFocus = true) {
+    if (!feedbackSession) return;
+    const { trigger } = feedbackSession;
+    feedbackSession = null;
+    feedbackDialog.close();
+    feedbackForm.reset();
+    feedbackError.textContent = "";
+    setFeedbackPending(false);
+    if (restoreFocus) {
+      const returnTo = trigger.isConnected ? trigger : document.querySelector('[data-action="open-feedback"]');
+      returnTo?.focus({ preventScroll: true });
+    }
+  }
+
+  async function submitFeedback() {
+    const session = feedbackSession;
+    if (!session || session.pending || !feedbackDialog.open || !isSignedInCompanyMember()) return;
+    const message = feedbackMessage.value.trim();
+    if (!message || message.length > feedbackMessage.maxLength) {
+      feedbackError.textContent = "Enter your feedback in 2,000 characters or fewer.";
+      feedbackMessage.focus();
+      return;
+    }
+    if (session.request?.message !== message) {
+      session.request = { message, view: session.view, requestId: crypto.randomUUID() };
+    }
+
+    session.pending = true;
+    feedbackError.textContent = "";
+    setFeedbackPending(true);
+    let timeout;
+    try {
+      const response = await Promise.race([
+        supabaseClient.functions.invoke("send-feedback", { body: session.request }),
+        new Promise((resolve) => { timeout = window.setTimeout(() => resolve(null), 30000); })
+      ]);
+      if (session !== feedbackSession) return;
+      if (response?.data?.sent === true && !response.error) {
+        closeFeedback();
+        showToast("Feedback sent", "Thanks for helping improve Taylor Safe.");
+        return;
+      }
+      const status = response?.response?.status ?? response?.error?.context?.status;
+      if (status === 409) {
+        feedbackError.textContent = "Delivery could not be confirmed. Your message is still here. Check with the app owner before sending it again.";
+      } else if (status === 429) {
+        feedbackError.textContent = "The feedback send limit was reached. Your message is still here. Try again later.";
+      } else if (status === 400) {
+        feedbackError.textContent = "This submission could not be accepted. Copy your message and reopen Feedback to start a new submission.";
+      } else {
+        feedbackError.textContent = feedbackFailureMessage;
+      }
+    } catch (_error) {
+      if (session === feedbackSession) {
+        feedbackError.textContent = feedbackFailureMessage;
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (session === feedbackSession) {
+        session.pending = false;
+        setFeedbackPending(false);
+        feedbackMessage.focus({ preventScroll: true });
+      }
+    }
   }
 
   async function handleInspectionSubmit(form) {
@@ -8419,6 +8513,15 @@
     if (!target) return;
     const action = target.dataset.action;
 
+    if (action === "open-feedback") {
+      openFeedback(target);
+      return;
+    }
+    if (action === "cancel-feedback") {
+      if (!feedbackSession?.pending) closeFeedback();
+      return;
+    }
+
     if (action === "close-handoff-window") {
       window.close();
       return;
@@ -8974,6 +9077,11 @@
   });
 
   document.addEventListener("submit", (event) => {
+    if (event.target === feedbackForm) {
+      event.preventDefault();
+      submitFeedback();
+      return;
+    }
     if (event.target.id === "employee-handoff-form") {
       event.preventDefault();
       handleEmployeeHandoffSubmit(event.target);
@@ -9111,7 +9219,13 @@
     }
   });
 
+  feedbackDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    if (!feedbackSession?.pending) closeFeedback();
+  });
+
   document.addEventListener("keydown", (event) => {
+    if (feedbackDialog.open) return;
     if (event.key === "Tab" && state.modal && state.view === "calendar") {
       const controls = [...document.querySelectorAll('.modal button:not([disabled]), .modal input:not([disabled]), .modal select:not([disabled]), .modal a[href]')];
       const first = controls[0];

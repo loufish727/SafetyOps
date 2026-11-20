@@ -884,8 +884,10 @@ function fakeSupabaseScript(options = {}) {
     Object.assign(tables, options.tableOverrides);
   }
   const seed = {
-    session: { user: AUTH_USER },
+    session: options.signedOut ? null : { user: AUTH_USER },
     companyId: WORKSPACE_FIXTURE.company.id,
+    feedbackResponses: options.feedback ? (options.feedbackResponses || [{ data: { sent: true }, error: null }]) : null,
+    delayFeedback: options.delayFeedback === true,
     tables
   };
 
@@ -901,6 +903,7 @@ function fakeSupabaseScript(options = {}) {
       var isolatedHandoffClient = /handoff/i.test(window.location.search + window.location.hash);
       var incidentSequence = 1000;
       var archiveQueryError = ${options.archiveQueryError ? "true" : "false"};
+      var pendingFeedback = null;
 
       function clone(value) {
         return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -2242,6 +2245,13 @@ function fakeSupabaseScript(options = {}) {
         functions: {
           invoke: function (name, invokeOptions) {
             calls.push({ method: "function", name: name, options: clone(invokeOptions) });
+            if (name === "send-feedback" && seed.feedbackResponses) {
+              var response = seed.feedbackResponses.shift() || { data: null, error: { message: "Unexpected feedback request." } };
+              if (!seed.delayFeedback) return Promise.resolve(response);
+              return new Promise(function (resolve) {
+                pendingFeedback = function () { resolve(response); };
+              });
+            }
             if (name === "employee-document-file") {
               return Promise.resolve(invokeEmployeeDocumentFile(invokeOptions?.body || {}));
             }
@@ -2304,6 +2314,13 @@ function fakeSupabaseScript(options = {}) {
       };
 
       window.__safetyOpsFakeDb = { tables: tables, calls: calls };
+      window.__resolveSafetyOpsFeedback = function () {
+        if (!pendingFeedback) return false;
+        var resolve = pendingFeedback;
+        pendingFeedback = null;
+        resolve();
+        return true;
+      };
       window.supabase = {
         createClient: function () {
           return client;

@@ -3,6 +3,24 @@
 LFES rule: record what ran, what it proved, and what remains outside the proof
 boundary.
 
+## Feedback email release
+
+The signed-in header opens a Feedback dialog over the current page. It keeps
+the page, location filter, and existing draft in place. Delivery uses the
+existing MaintainOps Google Apps Script relay and the configured owner inbox.
+
+Feedback-only backport checks passed: 10 desktop and mobile browser tests,
+9 mocked relay handler tests, and the local PostgreSQL reservation test.
+
+Hosted setup confirmed the migration and expected privilege restrictions,
+the five Edge secrets, and `send-feedback` v1 active with JWT verification.
+The approved-origin preflight returned 204 and an unauthenticated request
+returned 401. A signed-in test from the released frontend and inbox receipt
+are still pending.
+
+See [Feedback email setup](supabase-change-requests/2026-11-20-feedback-email.md)
+for the configuration, checks, and rollback.
+
 ## Current 2026-08-06 evidence
 
 | Check | Result | What it proves | What it does not prove |

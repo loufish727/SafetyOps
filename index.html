@@ -26,6 +26,23 @@
     <div id="app" aria-live="polite"></div>
     <div id="toast-region" class="toast-region" aria-live="polite"></div>
     <div id="reference-panel-region"></div>
+    <dialog id="feedback-dialog" class="feedback-dialog" aria-labelledby="feedback-heading" aria-describedby="feedback-hint">
+      <form id="feedback-form">
+        <header>
+          <h2 id="feedback-heading">Send feedback</h2>
+          <p id="feedback-hint">Your app feedback, work email, and screen name go to the app owner.</p>
+        </header>
+        <div class="field">
+          <label for="feedback-message">Your feedback</label>
+          <textarea id="feedback-message" name="message" rows="5" maxlength="2000" required autofocus></textarea>
+        </div>
+        <p id="feedback-error" class="feedback-error" role="alert"></p>
+        <div class="feedback-actions">
+          <button class="button" type="button" data-action="cancel-feedback">Cancel</button>
+          <button class="button primary" type="submit">Send feedback</button>
+        </div>
+      </form>
+    </dialog>
 
     <script src="vendor/supabase.js"></script>
     <script src="supabase-config.js"></script>

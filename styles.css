@@ -679,6 +679,53 @@ h3,
   gap: 8px;
 }
 
+.feedback-dialog {
+  width: min(480px, calc(100% - 28px));
+  max-height: calc(100dvh - 28px);
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-lg);
+  overscroll-behavior: contain;
+}
+
+.feedback-dialog::backdrop {
+  background: rgb(16 35 31 / 60%);
+}
+
+#feedback-form {
+  display: grid;
+  gap: 16px;
+}
+
+#feedback-form h2 {
+  margin-bottom: 6px;
+  font-size: 22px;
+}
+
+#feedback-hint {
+  color: var(--muted-strong);
+  font-size: 13px;
+}
+
+.feedback-error {
+  color: var(--red);
+  font-size: 13px;
+}
+
+.feedback-error:empty {
+  margin: -16px 0 0;
+}
+
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
@@ -6589,10 +6636,10 @@ a.citation-chip:hover {
   }
 
   .topbar {
-    grid-template-columns: minmax(180px, 1fr) auto;
+    grid-template-columns: minmax(140px, 1fr) auto auto;
   }
 
-  .topbar-actions {
+  .topbar-actions > :not(.feedback-trigger) {
     display: none;
   }
 }
@@ -6712,7 +6759,7 @@ a.citation-chip:hover {
   }
 
   .topbar {
-    grid-template-columns: auto minmax(160px, 1fr) auto;
+    grid-template-columns: auto minmax(120px, 1fr) auto auto;
   }
 
   .mobile-menu-button {
@@ -7230,16 +7277,21 @@ a.citation-chip:hover {
   }
 
   .topbar {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
   }
 
   .location-control {
     justify-self: stretch;
+    min-width: 0;
   }
 
   .location-control select {
     width: 100%;
     max-width: none;
+  }
+
+  .feedback-trigger {
+    padding-inline: 10px;
   }
 
   .page {

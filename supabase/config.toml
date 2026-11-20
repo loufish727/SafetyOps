@@ -23,6 +23,9 @@ verify_jwt = true
 [functions.employee-document-file]
 verify_jwt = true
 
+[functions.send-feedback]
+verify_jwt = true
+
 [functions.drive-safety-ingest]
 # This non-browser service endpoint authenticates with a separate constant-time
 # import secret and never accepts user JWTs. The function rejects Origin-bearing
