@@ -9,8 +9,10 @@ The signed-in header opens a Feedback dialog over the current page. It keeps
 the page, location filter, and existing draft in place. Delivery uses the
 existing MaintainOps Google Apps Script relay and the configured owner inbox.
 
-Feedback-only backport checks passed: 10 desktop and mobile browser tests,
-9 mocked relay handler tests, and the local PostgreSQL reservation test.
+The clean release checkout passed 157 browser tests, with nine conditional
+skips. This includes 10 desktop and mobile Feedback cases. Nine mocked relay
+handler tests, the local PostgreSQL reservation test, and the static build
+also passed.
 
 Hosted setup confirmed the migration and expected privilege restrictions,
 the five Edge secrets, and `send-feedback` v1 active with JWT verification.
